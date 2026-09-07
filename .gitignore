@@ -1,0 +1,20 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Logs
+*.log
+web.log
+
+# Temporary / Agent metadata
+.agents/
+.DS_Store
+switch.db
+
+# Environment & Secrets (Local Only)
+.env
+.env.*
+*.env
+!.env.example

@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>SWITCH_ // IIUM Energy Conservation</title>
+    <link rel="stylesheet" href="/static/style.css?v=4.7">
+</head>
+<body>
+    <!-- AUTHENTICATION OVERLAY GATE -->
+    <div id="authOverlay" style="position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.70); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); display:flex; align-items:center; justify-content:center; padding:1rem;">
+        <div style="background:#080808; border:1px solid var(--border-strong); padding:1.75rem 1.5rem; max-width:320px; width:100%; text-align:center; box-sizing:border-box;">
+            <div style="font-size:1.1rem; font-weight:900; letter-spacing:0.06em; color:var(--text-pure); margin-bottom:1rem;">Password?</div>
+            <form id="authForm" onsubmit="event.preventDefault(); verifyPassword();" style="margin:0;">
+                <input type="password" id="authPasswordInput" class="input-control" placeholder="••••" autofocus autocomplete="current-password" style="width:100%; text-align:center; font-size:1.1rem; letter-spacing:0.25em; padding:0.6rem 0.5rem; box-sizing:border-box; margin-bottom:0.75rem;">
+                <button type="submit" class="btn btn-primary" style="width:100%; padding:0.65rem; font-weight:800; letter-spacing:0.08em;">ENTER</button>
+                <div id="authErrorMsg" style="display:none; color:#ff4444; font-size:0.68rem; font-weight:700; margin-top:0.65rem; letter-spacing:0.04em;">INCORRECT PASSWORD</div>
+            </form>
+        </div>
+    </div>
+    <script>
+        if (sessionStorage.getItem("switch_auth") === "true" || window.location.search.includes("auth=test")) {
+            var el = document.getElementById("authOverlay");
+            if (el) el.style.display = "none";
+        }
+    </script>
+
+    <div class="app-container">
+        <!-- TACTICAL BLUEPRINT SIDEBAR -->
+        <aside class="sidebar">
+            <div>
+                <div class="brand-section">
+                    <span class="brand-badge">ZLATANFC</span>
+                    <h1 class="brand-title">SWITCH_</h1>
+                    <div class="brand-subtitle">IN-WALL ATMEGA328P // SDG 7 &amp; 9</div>
+                </div>
+
+                <!-- NAVIGATION MENU -->
+                <nav class="nav-menu">
+                    <a class="nav-item active" data-view="viewConsole" onclick="navigate('viewConsole')">
+                        <span class="nav-num">[01]</span>
+                        <span class="nav-label-desktop">HARDWARE CONSOLE</span>
+                        <span class="nav-label-mobile">CONTROLS</span>
+                    </a>
+                    <a class="nav-item" data-view="viewTimetable" onclick="navigate('viewTimetable')">
+                        <span class="nav-num">[02]</span>
+                        <span class="nav-label-desktop">TIMETABLE MATRIX</span>
+                        <span class="nav-label-mobile">SCHEDULE</span>
+                    </a>
+                    <a class="nav-item" data-view="viewAnalytics" onclick="navigate('viewAnalytics')">
+                        <span class="nav-num">[03]</span>
+                        <span class="nav-label-desktop">ENERGY &amp; SDG 7</span>
+                        <span class="nav-label-mobile">ECO IMPACT</span>
+                    </a>
+                    <a id="navItemDiagnostics" class="nav-item" data-view="viewDiagnostics" onclick="navigate('viewDiagnostics')">
+                        <span class="nav-num">[04]</span>
+                        <span class="nav-label-desktop">DIAGNOSTICS</span>
+                        <span class="nav-label-mobile">DIAGNOSTICS</span>
+                    </a>
+                </nav>
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="hw-tag">
+                    <span>PORT:</span>
+                    <span style="color:var(--text-pure); font-weight:700;">/dev/ttyACM0</span>
+                </div>
+                <div class="hw-tag">
+                    <span>CHIP:</span>
+                    <span>ATMEGA328P @ 9600</span>
+                </div>
+                <div class="hw-tag" style="margin-bottom:0;">
+                    <span>GATEWAY:</span>
+                    <div class="hw-status-pill">
+                        <div id="sidebarHwDot" class="hw-dot"></div>
+                        <span id="sidebarHwText">ONLINE</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- MAIN VIEWPORT -->
+        <main class="main-viewport">
+            <!-- TOP CHROME BAR -->
+            <header class="topbar">
+                <div class="topbar-title-group">
+                    <span class="topbar-tag" id="topbarTag">SEC.01</span>
+                    <h2 class="topbar-title" id="screenTitle">HARDWARE DIGITAL TWIN &amp; CONTROLS</h2>
+                </div>
+                <div class="topbar-meta">
+                    <span class="meta-badge" id="activeScopeBadge">SCOPE: ROOM</span>
+                    <span class="meta-badge" id="activeRoomBadge">TARGET: E1-2-14 [POC]</span>
+                    <span class="meta-badge" id="switchDayBadge" style="background:#000; color:#fff; border:1px solid #fff;">DAY: MON [DAY 1]</span>
+                    <span class="meta-badge" id="switchStateBadge">STATE: STANDBY</span>
+                </div>
+            </header>
+
+            <!-- ===================================================================
+                 SCREEN 01: HARDWARE DIGITAL TWIN & CONSOLE
+                 =================================================================== -->
+            <section id="viewConsole" class="screen-view active">
+                <!-- Campus Fleet Target & Controller Selector -->
+                <div class="b-panel target-fleet-panel">
+                    <div class="controller-fleet-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
+                        <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                            <span class="scope-label" style="font-size:0.68rem; margin:0;">ACTIVE CONTROLLER TARGET:</span>
+                            <select id="consoleRoomSelect" class="select-control" style="padding:0.3rem 0.6rem; font-size:0.75rem; font-weight:700;" onchange="switchConsoleRoom(this.value)">
+                                <option value="E1-2-14">E1-2-14 // Embedded Systems Lab [LIVE BENCH HARDWARE]</option>
+                                <option value="E1-1-01">E1-1-01 // Lecture Hall [SIMULATED EDGE SWITCH]</option>
+                                <option value="E1-2-15">E1-2-15 // Electronics Lab [SIMULATED EDGE SWITCH]</option>
+                                <option value="E1-2-16">E1-2-16 // Seminar Room [SIMULATED EDGE SWITCH]</option>
+                                <option value="A-1-02">A-1-02 // KICT Networking Lab [SIMULATED EDGE SWITCH]</option>
+                            </select>
+                            <span id="controllerTypeBadge" class="meta-badge" style="background:#003311; color:#00ff66; border:1px solid #00aa44; font-size:0.65rem;">LIVE SERIAL USB</span>
+                            <span id="controllerDevBadge" class="meta-badge" style="background:#330000; color:#ff3333; border:1px solid #aa0000; font-size:0.65rem; font-weight:900;">DEV</span>
+                        </div>
+                        <div class="mobile-hide" style="display:flex; align-items:center; gap:1.25rem; font-size:0.68rem; font-weight:700;">
+                            <div>
+                                <span style="color:var(--text-dim);">CAMPUS FLEET ARCHITECTURE:</span>
+                                <span style="color:var(--text-pure); margin-left:4px;">1 PHYSICAL + 14 FLEET NODES</span>
+                            </div>
+                            <div>
+                                <span style="color:var(--text-dim);">EDGE PROTOCOL:</span>
+                                <span style="color:#00ffcc; margin-left:4px;">USB-SERIAL + MQTT/TLS</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="console-grid">
+                    <!-- Left: Microcontroller Twin -->
+                    <div class="b-panel">
+                        <div class="b-panel-header">
+                            <span id="consolePanelTitle" class="b-panel-title">ATmega328P Microcontroller Real-Time Actuation</span>
+                            <span id="consoleDevPort" style="font-size:0.65rem; color:var(--text-dim); font-weight:700;">DEV: /dev/ttyACM0</span>
+                        </div>
+                        <div class="b-panel-body">
+                            <!-- Digital Clock -->
+                            <div class="digital-clock-card">
+                                <div id="digitalClockDisplay" class="digital-clock-display">00:00:00</div>
+                                <div id="clockSubtext" class="clock-subtext">HARDWARE REAL-TIME CLOCK [RTC-EMU]</div>
+                            </div>
+
+                            <!-- 3 Relay Channels -->
+                            <div class="relay-rack">
+                                <div class="relay-channel">
+                                    <div class="channel-label">RELAY 01 // LIGHTS</div>
+                                    <div id="boxRelayLights" class="channel-state-box">STANDBY</div>
+                                    <div class="channel-pin-desc">PIN 13 // SOLID STATE</div>
+                                </div>
+                                <div class="relay-channel">
+                                    <div class="channel-label">RELAY 02 // HVAC</div>
+                                    <div id="boxRelayAC" class="channel-state-box">STANDBY</div>
+                                    <div class="channel-pin-desc">PIN 12 // HIGH INDUCTIVE</div>
+                                </div>
+                                <div class="relay-channel">
+                                    <div class="channel-label">RELAY 03 // ALERT</div>
+                                    <div id="boxRelayStandby" class="channel-state-box energized">STANDBY</div>
+                                    <div class="channel-pin-desc">PIN 11 // SYSTEM ACTIVE</div>
+                                </div>
+                            </div>
+
+                            <!-- Intelligent Hardware Control Modes -->
+                            <div style="margin-bottom:0.85rem;">
+                                <span class="scope-label" style="display:block; margin-bottom:0.45rem;">SYSTEM CONTROL MODE // SCHEDULE ARBITRATION:</span>
+                                <div class="mode-btn-grid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:4px; margin-bottom:0.5rem;">
+                                    <button id="btnModeAuto" class="btn btn-sm btn-primary" onclick="setAutoMode()" title="Strict Timetable Schedule Adherence">AUTO SCHEDULE</button>
+                                    <button id="btnModeForceOn" class="btn btn-sm" onclick="setForceOn(60)" title="Force utilities ON with 60-min auto-off timer">FORCE ON [+60M]</button>
+                                    <button id="btnModeForceOff" class="btn btn-sm" onclick="setForceOff()" title="Early dismissal: Force OFF until session ends">FORCE OFF</button>
+                                    <button id="btnModePres" class="btn btn-sm" onclick="setPresentationMode()" title="Projector mode: Lights OFF, AC ON">PRESENTATION</button>
+                                </div>
+                                <div class="host-action-row" style="display:flex; gap:0.5rem;">
+                                    <button id="btnManualOverride" style="display:none;" onclick="toggleManualOverride()"></button>
+                                    <button id="btnAutoMode" style="display:none;" onclick="setAutoMode()"></button>
+                                    <button class="btn btn-sm" style="flex:1;" onclick="syncHostClock()">SYNC HOST TIME</button>
+                                    <button id="btnTestBuzzer" class="btn btn-sm" style="flex:1;" onclick="testBuzzer()">TEST BEEPER [PIN 3]</button>
+                                </div>
+                            </div>
+
+                            <!-- Demonstration Speed Multipliers (Demo Feature) -->
+                            <div id="demoSpeedSection" style="border-top:1px solid var(--border-dim); padding-top:0.85rem;">
+                                <span class="scope-label" style="display:block; margin-bottom:0.45rem;">HARDWARE CLOCK ACCELERATION [DEMO]:</span>
+                                <div class="segmented-control" style="width:100%;">
+                                    <button id="btnSpeed1" class="segmented-btn active" style="flex:1;" onclick="setSpeed(1)">1X REALTIME</button>
+                                    <button id="btnSpeed60" class="segmented-btn" style="flex:1;" onclick="setSpeed(60)">60X [1s = 1m]</button>
+                                    <button id="btnSpeed600" class="segmented-btn" style="flex:1;" onclick="setSpeed(600)">600X [1s = 10m]</button>
+                                </div>
+                            </div>
+
+                            <!-- State Simulation Demo Presets (Demo Feature) -->
+                            <div id="demoStateJumpsSection" class="demo-jumps-panel" style="border-top:1px solid var(--border-dim); padding-top:0.95rem; margin-top:0.95rem;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+                                    <span class="scope-label">STATE SIMULATION JUMP [DEMO PRESETS // MON SYNC]:</span>
+                                    <span style="font-size:0.62rem; color:var(--text-dim); font-weight:700;">AUTONOMOUS MONDAY TIMELINE REPLICATION</span>
+                                </div>
+                                <div class="demo-preset-grid">
+                                    <button class="btn demo-jump-card" onclick="setDemoTime(8, 25, 0, 'MON')" title="AC pre-cool (Lights OFF, AC ON)">
+                                        <div class="demo-jump-header">
+                                            <span class="demo-jump-time">08:25:00</span>
+                                            <span class="demo-jump-tag">PRECOOL</span>
+                                        </div>
+                                        <div class="demo-jump-sub">10M HVAC LEAD TIME // LIGHTS OFF</div>
+                                    </button>
+                                    <button class="btn demo-jump-card" onclick="setDemoTime(8, 45, 0, 'MON')" title="Class active (Lights ON, AC ON)">
+                                        <div class="demo-jump-header">
+                                            <span class="demo-jump-time">08:45:00</span>
+                                            <span class="demo-jump-tag">CLASS</span>
+                                        </div>
+                                        <div class="demo-jump-sub">AC + ROOM LIGHTS FULLY ENERGIZED</div>
+                                    </button>
+                                    <button class="btn demo-jump-card" onclick="setDemoTime(11, 35, 0, 'MON')" title="Grace countdown alert (15s ping)">
+                                        <div class="demo-jump-header">
+                                            <span class="demo-jump-time">11:35:00</span>
+                                            <span class="demo-jump-tag">GRACE</span>
+                                        </div>
+                                        <div class="demo-jump-sub">15S ACOUSTIC PING [1600 HZ]</div>
+                                    </button>
+                                    <button class="btn demo-jump-card" onclick="setDemoTime(11, 39, 50, 'MON')" title="Urgent final 10s countdown (1Hz rapid warning beeps before 11:40 cutoff)">
+                                        <div class="demo-jump-header">
+                                            <span class="demo-jump-time">11:39:50</span>
+                                            <span class="demo-jump-tag urgent">URGENT</span>
+                                        </div>
+                                        <div class="demo-jump-sub">FINAL 10S 1HZ EMERGENCY CHIRPS</div>
+                                    </button>
+                                    <button class="btn demo-jump-card" onclick="setDemoTime(12, 0, 0, 'MON')" title="Zero waste cutoff (Standby ON)">
+                                        <div class="demo-jump-header">
+                                            <span class="demo-jump-time">12:00:00</span>
+                                            <span class="demo-jump-tag">STANDBY</span>
+                                        </div>
+                                        <div class="demo-jump-sub">0W RELAY CUTOFF // ZERO WASTE</div>
+                                    </button>
+                                    <button id="btnNightSweepDemo" class="btn demo-jump-card" onclick="triggerNightSweepDemo()" title="Test Night Sweep Curfew (10s countdown before cutoff with 1100Hz warning tone)">
+                                        <div class="demo-jump-header">
+                                            <span class="demo-jump-time">23:59:50</span>
+                                            <span class="demo-jump-tag">SWEEP</span>
+                                        </div>
+                                        <div class="demo-jump-sub">CURFEW SWEEP 1100HZ TIMEOUT</div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Hardware Safeguards & Acoustic Telemetry Strip (Fills dead space) -->
+                            <div class="failsafe-status-rack" style="border-top:1px solid var(--border-dim); padding-top:0.95rem; margin-top:0.95rem;">
+                                <div style="margin-bottom:0.5rem;">
+                                    <span class="scope-label">MICROCODE SAFEGUARDS &amp; ACOUSTIC HARMONICS:</span>
+                                </div>
+                                <div class="failsafe-grid">
+                                    <div class="failsafe-card">
+                                        <div class="failsafe-label">GRACE CADENCE</div>
+                                        <div class="failsafe-val">1600 HZ / 15S</div>
+                                        <div class="failsafe-sub">General warning ping</div>
+                                    </div>
+                                    <div class="failsafe-card">
+                                        <div class="failsafe-label">URGENT CADENCE</div>
+                                        <div class="failsafe-val">2800 HZ / 1S</div>
+                                        <div class="failsafe-sub">Final 10s countdown</div>
+                                    </div>
+                                    <div class="failsafe-card">
+                                        <div class="failsafe-label">NIGHT SWEEP</div>
+                                        <div class="failsafe-val">1100 HZ PULSE</div>
+                                        <div class="failsafe-sub">Curfew hard cutoff</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Schedule & Hardware Policy -->
+                    <div class="console-policy-col" style="display:flex; flex-direction:column; gap:1.25rem;">
+                        <div class="b-panel" style="flex:1;">
+                            <div class="b-panel-header">
+                                <span class="b-panel-title">Active Operating Windows &amp; EEPROM Policy</span>
+                                <button id="btnFlashConsole" class="btn btn-sm btn-primary" onclick="deploySchedule()">FLASH EEPROM [USB]</button>
+                            </div>
+                            <div class="b-panel-body">
+                                <table class="kv-table">
+                                    <tr>
+                                        <td>ACTIVE SWITCH DAY:</td>
+                                        <td id="consoleActiveDayDesc" style="font-weight:700;">MONDAY [DAY 1]</td>
+                                    </tr>
+                                    <tr class="day-jump-row">
+                                        <td colspan="2" style="padding: 0.6rem 0.5rem;">
+                                            <div class="day-jump-label" style="font-size:0.68rem; font-weight:700; color:var(--text-dim); margin-bottom:0.45rem; text-transform:uppercase;">SWITCH DAY JUMP:</div>
+                                            <div class="day-pill-container">
+                                                <button class="btn btn-sm day-pill-btn" onclick="setSwitchDay('MON')">MON</button>
+                                                <button class="btn btn-sm day-pill-btn" onclick="setSwitchDay('TUE')">TUE</button>
+                                                <button class="btn btn-sm day-pill-btn" onclick="setSwitchDay('WED')">WED</button>
+                                                <button class="btn btn-sm day-pill-btn" onclick="setSwitchDay('THU')">THU</button>
+                                                <button class="btn btn-sm day-pill-btn" onclick="setSwitchDay('FRI')">FRI</button>
+                                                <button class="btn btn-sm day-pill-btn" onclick="setSwitchDay('SAT')">SAT</button>
+                                                <button class="btn btn-sm day-pill-btn" onclick="setSwitchDay('SUN')">SUN</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>SLOT 1 (MORNING):</td>
+                                        <td id="consoleSlot1Desc">STANDBY (08:30 - 11:30)</td>
+                                    </tr>
+                                    <tr>
+                                        <td>SLOT 2 (AFTERNOON):</td>
+                                        <td id="consoleSlot2Desc">STANDBY (14:00 - 17:00)</td>
+                                    </tr>
+                                    <tr>
+                                        <td>PRE-COOLING LEAD TIME:</td>
+                                        <td id="consolePrecoolVal">10 MINUTES PRIOR</td>
+                                    </tr>
+                                    <tr>
+                                        <td>AUTO-SHUTDOWN GRACE:</td>
+                                        <td id="consoleGraceVal">10 MINUTES POST</td>
+                                    </tr>
+                                    <tr>
+                                        <td>MIDNIGHT FAILSAFE SWEEP:</td>
+                                        <td id="consoleMidnightVal">00:00 (12:00 AM)</td>
+                                    </tr>
+                                    <tr>
+                                        <td>FORCE ON EXTENSION:</td>
+                                        <td id="consoleForceOnVal">60 MINUTES</td>
+                                    </tr>
+                                    <tr class="mobile-hide">
+                                        <td>LAST SERIAL ACK:</td>
+                                        <td id="consoleLastAck">OK:SCHED_SAVED</td>
+                                    </tr>
+                                    <tr class="mobile-hide">
+                                        <td>TARGET SWITCH:</td>
+                                        <td>KOE // ROOM E1-2-14</td>
+                                    </tr>
+                                </table>
+
+                                <div style="margin-top:1rem; display:flex; gap:0.5rem;">
+                                    <button class="btn btn-sm" style="flex:1;" onclick="openModal('modalPolicy')">EDIT POLICY TIMERS</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="b-panel mobile-hide">
+                            <div class="b-panel-header">
+                                <span class="b-panel-title">SDG 7 Energy Automation Architecture</span>
+                            </div>
+                            <div class="b-panel-body" style="font-size:0.72rem; color:var(--text-medium); line-height:1.6;">
+                                <p style="margin-bottom:0.5rem;">
+                                    Autonomous in-wall microcontroller executing an offline-first state machine. Microcode reads non-volatile internal EEPROM schedules independently of host connectivity.
+                                </p>
+                                <p>
+                                    Air conditioning pre-cools 10m in advance, lights energize at class start, and power is automatically cut once the room grace period elapses.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lower Telemetry Strip -->
+                <div class="telemetry-rack mobile-hide">
+                    <div class="telemetry-card">
+                        <div class="telemetry-card-title">REAL-TIME CONNECTED LOAD</div>
+                        <div class="telemetry-card-val" id="metricLiveLoad">0 W</div>
+                        <div class="telemetry-card-sub" id="metricLiveLoadSub">STANDBY // ZERO WASTE</div>
+                    </div>
+                    <div class="telemetry-card">
+                        <div class="telemetry-card-title">AC MAINS VOLTAGE</div>
+                        <div class="telemetry-card-val">240.0 V</div>
+                        <div class="telemetry-card-sub">50.0 HZ GRID STABILIZED</div>
+                    </div>
+                    <div class="telemetry-card">
+                        <div class="telemetry-card-title">CIRCUIT CURRENT DRAW</div>
+                        <div class="telemetry-card-val" id="metricLiveCurrent">0.02 A</div>
+                        <div class="telemetry-card-sub">SOLID-STATE SSR BUS</div>
+                    </div>
+                    <div class="telemetry-card">
+                        <div class="telemetry-card-title">ACOUSTIC INTEGRATION</div>
+                        <div class="telemetry-card-val">PIN 3 READY</div>
+                        <div class="telemetry-card-sub">MULTI-TIERED GRACE ALERTS</div>
+                    </div>
+                </div>
+
+                <!-- Visual Grace Alert & Cutoff Timeline -->
+                <div class="pipeline-bar mobile-hide">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span class="b-panel-title" style="font-size:0.68rem;">AUTOMATION TIMELINE &amp; ACOUSTIC SHUTDOWN PIPELINE</span>
+                        <span style="font-size:0.64rem; color:var(--text-dim);">SDG 7 // ZERO-HUMAN-INTERVENTION SAFETY GATES</span>
+                    </div>
+                    <div class="pipeline-steps">
+                        <div id="pipePrecool" class="pipeline-step">[ 1 ] PRE-COOLING (10M)</div>
+                        <div id="pipeClass" class="pipeline-step">[ 2 ] CLASS ACTIVE</div>
+                        <div id="pipeGrace15" class="pipeline-step">[ 3 ] GRACE PING (15S)</div>
+                        <div id="pipeGrace5" class="pipeline-step">[ 4 ] WARNING PULSE (5S)</div>
+                        <div id="pipeGrace1" class="pipeline-step">[ 5 ] URGENT ALERT (1S)</div>
+                        <div id="pipeStandby" class="pipeline-step active">[ 6 ] POWER CUTOFF</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===================================================================
+                 SCREEN 02: 1-CLICK IIUM PERIOD MATRIX & SCOPE BROADCAST
+                 =================================================================== -->
+            <section id="viewTimetable" class="screen-view">
+                <!-- Scope Broadcast Selector -->
+                <div class="scope-bar">
+                    <div class="scope-selectors">
+                        <span class="scope-label">CONTROL SCOPE:</span>
+                        <div class="segmented-control" id="scopeSegmentedControl">
+                            <button class="segmented-btn" data-scope="campus" onclick="setScope('campus')">CAMPUS-WIDE</button>
+                            <button class="segmented-btn" data-scope="kulliyyah" onclick="setScope('kulliyyah')">KULLIYYAH</button>
+                            <button class="segmented-btn" data-scope="level" onclick="setScope('level')">LEVEL</button>
+                            <button class="segmented-btn active" data-scope="room" onclick="setScope('room')">INDIVIDUAL ROOM</button>
+                        </div>
+                    </div>
+
+                    <!-- Filter Dropdowns -->
+                    <div class="scope-selectors hierarchy-dropdown-grid">
+                        <select id="selectBuilding" class="select-control" onchange="onHierarchyFilterChange()">
+                            <option value="KOE">KOE // Kulliyyah of Engineering</option>
+                            <option value="KICT">KICT // Info &amp; Comm Tech</option>
+                            <option value="KENMS">KENMS // Economics &amp; Mgmt</option>
+                            <option value="AIKOL">AIKOL // Kulliyyah of Laws</option>
+                            <option value="KIRKHS">KIRKHS // Islamic Revealed Knowledge</option>
+                            <option value="KAED">KAED // Architecture &amp; Design</option>
+                        </select>
+
+                        <select id="selectLevel" class="select-control" onchange="onHierarchyFilterChange()">
+                            <option value="2">Level 2</option>
+                            <option value="1">Level 1</option>
+                            <option value="3">Level 3</option>
+                        </select>
+
+                        <select id="selectRoom" class="select-control" onchange="onHierarchyFilterChange()">
+                            <option value="E1-2-14">E1-2-14 [POC HARDWARE]</option>
+                            <option value="E1-2-15">E1-2-15 Electronics Lab</option>
+                            <option value="E1-2-16">E1-2-16 Seminar Room</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Timetable Actions Toolbar -->
+                <div class="timetable-toolbar">
+                    <div class="toolbar-group">
+                        <button class="btn btn-sm" onclick="applyPreset('standard_weekday')">+ MON-FRI STANDARD [P1, P2, P4, P5]</button>
+                        <button class="btn btn-sm" onclick="openImaluumModal()">IMPORT I-MA'LUUM</button>
+                        <button class="btn btn-sm btn-alert" onclick="clearScopeSchedule()">CLEAR SCOPE</button>
+                    </div>
+
+                    <div class="toolbar-group">
+                        <button id="btnFlashTimetable" class="btn btn-primary" onclick="deploySchedule()">
+                            <span>FLASH TO DEV SWITCH [USB]</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 1-Click Period Matrix Grid -->
+                <div class="matrix-wrapper">
+                    <table class="matrix-table" id="matrixTable">
+                        <thead>
+                            <tr>
+                                <th class="col-day-header">DAY</th>
+                                <th class="col-period">P1<br><span style="font-size:0.6rem; color:var(--text-dim);">08:30-10:00</span></th>
+                                <th class="col-period">P2<br><span style="font-size:0.6rem; color:var(--text-dim);">10:00-11:30</span></th>
+                                <th class="col-period">P3<br><span style="font-size:0.6rem; color:var(--text-dim);">11:30-13:00</span></th>
+                                <th class="col-break">LUNCH<br>ZUHR</th>
+                                <th class="col-period">P4<br><span style="font-size:0.6rem; color:var(--text-dim);">14:00-15:30</span></th>
+                                <th class="col-period">P5<br><span style="font-size:0.6rem; color:var(--text-dim);">15:30-17:00</span></th>
+                                <th class="col-period">P6<br><span style="font-size:0.6rem; color:var(--text-dim);">17:00-18:30</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="matrixTableBody">
+                            <!-- Populated dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Timetable Summary Deck (Fills Lower Space) -->
+                <div class="timetable-summary-deck mobile-hide">
+                    <div class="summary-tile">
+                        <div class="summary-tile-label">SCHEDULED PERIODS</div>
+                        <div class="summary-tile-val" id="summaryPeriodCount">0 / 42</div>
+                        <div class="summary-tile-desc">OCCUPIED CLASS SLOTS</div>
+                    </div>
+                    <div class="summary-tile">
+                        <div class="summary-tile-label">WEEKLY OPERATING RUN-TIME</div>
+                        <div class="summary-tile-val" id="summaryOperatingHours">0.0 HRS</div>
+                        <div class="summary-tile-desc">LIGHTS &amp; HVAC ACTIVE</div>
+                    </div>
+                    <div class="summary-tile">
+                        <div class="summary-tile-label">AVOIDED OFF-HOURS WASTE</div>
+                        <div class="summary-tile-val" id="summaryAvoidedHours">70.0 HRS</div>
+                        <div class="summary-tile-desc">AUTOMATED STANDBY SAVINGS</div>
+                    </div>
+                    <div class="summary-tile">
+                        <div class="summary-tile-label">CAMPUS SCOPE BROADCAST</div>
+                        <div class="summary-tile-val" id="summaryScopeCount">1 ROOM</div>
+                        <div class="summary-tile-desc">SYNCHRONIZATION TARGET</div>
+                    </div>
+                </div>
+
+                <!-- Matrix Instruction Bar -->
+                <div class="mobile-hide" style="display:flex; justify-content:space-between; font-size:0.68rem; color:var(--text-dim); text-transform:uppercase; padding:0.25rem 0.2rem;">
+                    <span>[ 1-CLICK TOGGLE: TAP ANY PERIOD CELL TO TOGGLE OCCUPIED // VACANT ]</span>
+                    <span>ACTIVE SLOTS INVERT TO HIGH-CONTRAST SOLID WHITE BLOCKS</span>
+                </div>
+            </section>
+
+            <!-- ===================================================================
+                 SCREEN 03: ENERGY METRICS & AUDIT LOG
+                 =================================================================== -->
+            <section id="viewAnalytics" class="screen-view">
+                <div class="metric-row">
+                    <div class="metric-tile">
+                        <div class="metric-tile-header">AVOIDED ELECTRICAL ENERGY</div>
+                        <div class="metric-tile-val" id="metricAvoidedKwh">0.00 KWH</div>
+                        <div class="metric-tile-sub">ACCUMULATED AC + LIGHTING SHUTOFF</div>
+                    </div>
+                    <div class="metric-tile">
+                        <div class="metric-tile-header">TNB COMMERCIAL TARIFF REDUCTION</div>
+                        <div class="metric-tile-val" id="metricCostSaved">RM 0.00</div>
+                        <div class="metric-tile-sub">ESTIMATED AT RM 0.365 PER KWH</div>
+                    </div>
+                    <div class="metric-tile">
+                        <div class="metric-tile-header">ESTIMATED CO2 ABATED</div>
+                        <div class="metric-tile-val" id="metricCo2Abated">0.00 KG</div>
+                        <div class="metric-tile-sub">PENINSULAR GRID BASELINE (0.694 KG/KWH)</div>
+                    </div>
+                </div>
+
+                <!-- Benchmark Comparison Grid -->
+                <div class="benchmark-grid mobile-hide">
+                    <div class="benchmark-card">
+                        <span class="benchmark-badge baseline">CONVENTIONAL CLASSROOM BASELINE</span>
+                        <div style="font-size:0.75rem; color:var(--text-medium); line-height:1.6;">
+                            <p style="margin-bottom:0.4rem;"><strong style="color:var(--text-pure);">14.0 HOURS / DAY</strong> Unmonitored continuous manual operation.</p>
+                            <p style="margin-bottom:0.4rem;">AC and fluorescent lighting left running during unoccupied breaks and overnight.</p>
+                            <p><strong style="color:var(--accent-alert);">37.5 KWH / DAY</strong> Average utility consumption (RM 13.68 / day per room).</p>
+                        </div>
+                    </div>
+                    <div class="benchmark-card">
+                        <span class="benchmark-badge automated">SMARTSWITCH AUTOMATED OPERATION</span>
+                        <div style="font-size:0.75rem; color:var(--text-medium); line-height:1.6;">
+                            <p style="margin-bottom:0.4rem;"><strong style="color:var(--text-pure);">6.0 HOURS / DAY</strong> Strict occupancy-targeted schedule execution.</p>
+                            <p style="margin-bottom:0.4rem;">10m pre-cool lead time with automated cutoff after 10m grace period.</p>
+                            <p><strong style="color:var(--text-pure);">16.1 KWH / DAY</strong> Reduced utility consumption (<strong style="color:var(--text-pure);">57.1% UTILITY REDUCTION</strong>).</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="b-panel" style="flex:1;">
+                    <div class="b-panel-header">
+                        <span class="b-panel-title">Campus Facility Audit &amp; Event Log</span>
+                        <button class="btn btn-sm" onclick="fetchLogs()">REFRESH LOGS</button>
+                    </div>
+                    <div class="log-terminal">
+                        <table class="log-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:130px;">TIMESTAMP</th>
+                                    <th style="width:180px;">EVENT TYPE</th>
+                                    <th>DESCRIPTION / PAYLOAD</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logTableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===================================================================
+                 SCREEN 04: TACTICAL DIAGNOSTICS & RAW CRT STREAM
+                 =================================================================== -->
+            <section id="viewDiagnostics" class="screen-view">
+                <div class="diagnostics-grid">
+                    <!-- Left: CRT Terminal -->
+                    <div class="b-panel" style="flex:1; display:flex; flex-direction:column;">
+                        <div class="b-panel-header">
+                            <span class="b-panel-title">UART Serial Stream [/dev/ttyACM0]</span>
+                            <div style="display:flex; gap:0.4rem;">
+                                <button class="btn btn-sm" onclick="clearTerminalFeed()">CLEAR</button>
+                            </div>
+                        </div>
+                        <div class="b-panel-body" style="padding:0; display:flex; flex-direction:column; flex:1;">
+                            <div class="crt-terminal" id="crtTerminalContainer">
+                                <div class="crt-scanlines"></div>
+                                <div id="diagnosticsFeed" class="terminal-feed">CONNECTING TO GATEWAY SERIAL TELEMETRY STREAM...</div>
+                            </div>
+                            <div style="padding:0.75rem 1rem; border-top:1px solid var(--border-strong); background-color:#080808;">
+                                <div class="cmd-input-bar">
+                                    <input type="text" id="txtSerialCmd" class="input-control" style="flex:1;" placeholder="ENTER RAW ASCII SERIAL COMMAND (e.g. BEEP, PING, AUTO_MODE)..." onkeydown="if(event.key==='Enter') sendManualSerialCmd()">
+                                    <button class="btn btn-primary" onclick="sendManualSerialCmd()">SEND</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Hardware Pin Matrix & EEPROM Map -->
+                    <div style="display:flex; flex-direction:column; gap:1.25rem;">
+                        <div class="b-panel">
+                            <div class="b-panel-header">
+                                <span class="b-panel-title">Microcontroller GPIO Pin Inspector</span>
+                                <span style="font-size:0.62rem; color:var(--text-dim);">ATMEGA328P</span>
+                            </div>
+                            <div class="b-panel-body" style="padding:0.5rem 0.75rem;">
+                                <table class="pin-matrix-table">
+                                    <tr>
+                                        <td>PIN 13</td>
+                                        <td>YELLOW LED // LIGHTS RELAY</td>
+                                        <td style="text-align:right;"><span id="pin13Badge" class="pin-badge">LOW</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>PIN 12</td>
+                                        <td>BLUE LED // HVAC AC RELAY</td>
+                                        <td style="text-align:right;"><span id="pin12Badge" class="pin-badge">LOW</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>PIN 11</td>
+                                        <td>RED LED // STANDBY ACTIVE</td>
+                                        <td style="text-align:right;"><span id="pin11Badge" class="pin-badge active">HIGH</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>PIN 10</td>
+                                        <td>IN-WALL BUTTON 1 (INPUT_PULLUP)</td>
+                                        <td style="text-align:right;"><span id="pin10Badge" class="pin-badge">IDLE</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>PIN 9</td>
+                                        <td>CLOCK SPEED BUTTON 2 (WATCH ACCEL)</td>
+                                        <td style="text-align:right;"><span id="pin9Badge" class="pin-badge">IDLE</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>PIN 2</td>
+                                        <td>DAY SWITCH BUTTON 3 (PEEK / CYCLE)</td>
+                                        <td style="text-align:right;"><span id="pin2Badge" class="pin-badge">READY</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>PIN 3</td>
+                                        <td>ACOUSTIC BUZZER // BEEPER</td>
+                                        <td style="text-align:right;"><span id="pin3Badge" class="pin-badge">PWM OK</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>PIN 8, 7, 6</td>
+                                        <td>74HC595 SHIFT REGISTER (DS/ST/SH)</td>
+                                        <td style="text-align:right;"><span class="pin-badge">SPI BUS</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>PIN A0 - A3</td>
+                                        <td>4-DIGIT COMMON CATHODE MULTIPLEX</td>
+                                        <td style="text-align:right;"><span class="pin-badge">1MS MUX</span></td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="b-panel">
+                            <div class="b-panel-header">
+                                <span class="b-panel-title">Internal EEPROM Storage Layout</span>
+                                <span style="font-size:0.62rem; color:var(--text-dim);">ADDR 0x00 - 0x3A</span>
+                            </div>
+                            <div class="b-panel-body" style="padding:0.5rem 0.75rem;">
+                                <table class="pin-matrix-table">
+                                    <tr>
+                                        <td style="color:var(--text-dim);">0x00</td>
+                                        <td>MAGIC BYTE [VALIDITY]</td>
+                                        <td style="text-align:right; font-weight:700;">0x8A</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color:var(--text-dim);">0x01 - 0x38</td>
+                                        <td>7-DAY SCHEDULE MATRIX (8B &times; 7 DAYS)</td>
+                                        <td style="text-align:right; font-weight:700;" id="eepromDaysDesc">MON - SUN ACTIVE</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color:var(--text-dim);">0x39</td>
+                                        <td>PRE-COOLING LEAD TIME</td>
+                                        <td style="text-align:right; font-weight:700;" id="eepromPrecool">10 MINS</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color:var(--text-dim);">0x3A</td>
+                                        <td>AUTO-SHUTDOWN GRACE PERIOD</td>
+                                        <td style="text-align:right; font-weight:700;" id="eepromGrace">10 MINS</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- MODAL: IMPORT FROM I-MA'LUUM -->
+    <div id="modalImaluum" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-head">
+                <h3 class="modal-title">IMPORT FROM I-MA'LUUM PORTAL</h3>
+                <button class="modal-close" onclick="closeModal('modalImaluum')">&times;</button>
+            </div>
+            <p style="font-size:0.75rem; color:var(--text-medium); margin-bottom:1rem; line-height:1.5;">
+                Connects to the official IIUM student portal API (<code>imaluum.iium.edu.my</code>) to import registered academic timetable periods for the selected broadcast scope.
+            </p>
+            <div class="form-group">
+                <label>TARGET BROADCAST SCOPE:</label>
+                <div id="imaluumScopeText" style="padding:0.5rem; background-color:#050505; border:1px solid var(--border-strong); font-size:0.72rem; color:var(--text-pure); font-weight:700;">
+                    ROOM E1-2-14 [POC HARDWARE]
+                </div>
+            </div>
+            <div class="form-group">
+                <label>STUDENT / STAFF MATRIC ID (DEMO SEED):</label>
+                <input type="text" id="imaluumMatric" class="input-control" value="2119988" style="width:100%;">
+            </div>
+            <div class="modal-foot">
+                <button class="btn" onclick="closeModal('modalImaluum')">CANCEL</button>
+                <button id="btnFetchImaluum" class="btn btn-primary" onclick="executeImaluumImport()">FETCH &amp; APPLY TIMETABLE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: POLICY TIMERS CONFIGURATION -->
+    <div id="modalPolicy" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-head">
+                <h3 class="modal-title">ENERGY AUTOMATION POLICY CONFIGURATION</h3>
+                <button class="modal-close" onclick="closeModal('modalPolicy')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label>AIR CONDITIONER PRE-COOLING LEAD TIME (MINUTES):</label>
+                <input type="number" id="policyPrecool" class="input-control" min="0" max="60" value="10" style="width:100%;">
+                <div style="font-size:0.65rem; color:var(--text-dim); margin-top:0.3rem;">Energizes AC Relay (Pin 13) prior to class to ensure thermal comfort.</div>
+            </div>
+            <div class="form-group">
+                <label>AUTO-SHUTDOWN GRACE PERIOD (MINUTES):</label>
+                <input type="number" id="policyGrace" class="input-control" min="1" max="60" value="10" style="width:100%;">
+                <div style="font-size:0.65rem; color:var(--text-dim); margin-top:0.3rem;">Countdown safety window with warning beeps (Pin 3) before cutting power.</div>
+            </div>
+            <div class="form-group">
+                <label>MIDNIGHT ROLLOVER FAILSAFE / NIGHT SWEEP (CUTOFF TIME):</label>
+                <input type="time" id="policyMidnightCutoff" class="input-control" value="00:00" style="width:100%;">
+                <div style="font-size:0.65rem; color:var(--text-dim); margin-top:0.3rem;">Automated zero-waste curfew sweep: purges all active overrides and cuts utility power at midnight rollover.</div>
+            </div>
+            <div class="form-group">
+                <label>FORCE ON MANUAL OVERRIDE DURATION (MINUTES):</label>
+                <input type="number" id="policyForceOn" class="input-control" min="5" max="240" value="60" style="width:100%;">
+                <div style="font-size:0.65rem; color:var(--text-dim); margin-top:0.3rem;">Duration utilities stay active when Button 1 is pressed during off-hours or ad-hoc overtime.</div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn" onclick="closeModal('modalPolicy')">CANCEL</button>
+                <button class="btn btn-primary" onclick="savePolicy()">SAVE POLICY TO EEPROM</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer"></div>
+
+    <script src="/static/app.js?v=4.5"></script>
+</body>
+</html>

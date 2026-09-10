@@ -9,8 +9,8 @@
     <title>SWITCH_ // IIUM Energy Conservation</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=JetBrains+Mono:wght@400;600;700;800&family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=5.4">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=5.5">
 </head>
 <body>
     <!-- AUTHENTICATION OVERLAY GATE -->
@@ -32,6 +32,75 @@
     </script>
 
     <div class="app-container">
+        <!-- INDUSTRIAL BRUTALIST SIDEBAR (LEFT ON DESKTOP, STICKY TOP ON MOBILE) -->
+        <aside class="sidebar">
+            <!-- MOBILE BRAND HEADER -->
+            <div class="brand-section">
+                <span class="brand-badge">ZLATANFC</span>
+                <h1 class="brand-title"><span class="brand-full">SWITCH_</span></h1>
+                <div class="brand-subtitle">IN-WALL ATMEGA328P // SDG 7 &amp; 9</div>
+            </div>
+
+            <!-- DESKTOP INDUSTRIAL HEADER -->
+            <div class="sidebar-header">
+                <div class="sidebar-header-title">
+                    <span class="sidebar-header-dot">▪</span>
+                    <span class="sidebar-header-text">MENU</span>
+                </div>
+                <button id="sidebarToggleBtn" class="sidebar-toggle-circle" onclick="toggleSidebar()" title="Collapse Sidebar">
+                    <svg class="sidebar-close-svg" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" fill="none">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- NAVIGATION MENU -->
+            <nav class="nav-menu">
+                <a class="nav-item active" data-view="viewConsole" onclick="navigate('viewConsole')" title="Hardware Console">
+                    <span class="nav-label-desktop">CONSOLE</span>
+                    <span class="nav-label-mobile">CONTROLS</span>
+                    <span class="nav-active-dot">▪</span>
+                </a>
+                <a class="nav-item" data-view="viewTimetable" onclick="navigate('viewTimetable')" title="Timetable Matrix">
+                    <span class="nav-label-desktop">TIMETABLE</span>
+                    <span class="nav-label-mobile">SCHEDULE</span>
+                    <span class="nav-active-dot">▪</span>
+                </a>
+                <a class="nav-item" data-view="viewAnalytics" onclick="navigate('viewAnalytics')" title="Energy & SDG 7">
+                    <span class="nav-label-desktop">ANALYTICS</span>
+                    <span class="nav-label-mobile">ECO IMPACT</span>
+                    <span class="nav-active-dot">▪</span>
+                </a>
+                <a id="navItemDiagnostics" class="nav-item" data-view="viewDiagnostics" onclick="navigate('viewDiagnostics')" title="Diagnostics">
+                    <span class="nav-label-desktop">DIAGNOSTICS</span>
+                    <span class="nav-label-mobile">DIAGNOSTICS</span>
+                    <span class="nav-active-dot">▪</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="sidebar-footer-content">
+                    <div class="sidebar-meta-block">
+                        <div class="sidebar-meta-label">(EMAIL)</div>
+                        <a href="mailto:whois@imankh.me" class="sidebar-email-val">whois@imankh.me</a>
+                    </div>
+                    <div class="sidebar-meta-block">
+                        <div class="sidebar-meta-label">(LINKS)</div>
+                        <div class="sidebar-links-row">
+                            <a href="https://github.com/near-link/switch-zlatan" target="_blank" rel="noopener noreferrer" class="sidebar-repo-link">GitHub ↗</a>
+                        </div>
+                    </div>
+                    <div class="sidebar-telemetry-tag">
+                        <div id="sidebarHwDot" class="hw-dot"></div>
+                        <span id="sidebarHwText">ONLINE</span>
+                        <span style="color:#555;">//</span>
+                        <span id="sidebarHwLinkText">VIRTUAL</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
         <!-- MAIN VIEWPORT -->
         <main class="main-viewport">
             <!-- TOP CHROME BAR -->
@@ -587,76 +656,26 @@
                     </div>
                 </div>
             </section>
-        </main>
-
-        <!-- INDUSTRIAL BRUTALIST SIDEBAR (DOCKED RIGHT ON DESKTOP, TOP ON MOBILE) -->
-        <aside class="sidebar">
-            <!-- MOBILE BRAND HEADER -->
-            <div class="brand-section">
-                <span class="brand-badge">ZLATANFC</span>
-                <h1 class="brand-title"><span class="brand-full">SWITCH_</span></h1>
-                <div class="brand-subtitle">IN-WALL ATMEGA328P // SDG 7 &amp; 9</div>
-            </div>
-
-            <!-- DESKTOP INDUSTRIAL HEADER -->
-            <div class="sidebar-header">
-                <div class="sidebar-header-title">
-                    <span class="sidebar-header-dot">▪</span>
-                    <span class="sidebar-header-text">MENU</span>
-                </div>
-                <button id="sidebarToggleBtn" class="sidebar-toggle-circle" onclick="toggleSidebar()" title="Close Navigation">
-                    <svg class="sidebar-close-svg" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" fill="none">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
-            </div>
-
-            <!-- NAVIGATION MENU -->
-            <nav class="nav-menu">
-                <a class="nav-item active" data-view="viewConsole" onclick="navigate('viewConsole')" title="Hardware Console">
-                    <span class="nav-label-desktop">CONSOLE</span>
-                    <span class="nav-label-mobile">CONTROLS</span>
-                    <span class="nav-active-dot">▪</span>
-                </a>
-                <a class="nav-item" data-view="viewTimetable" onclick="navigate('viewTimetable')" title="Timetable Matrix">
-                    <span class="nav-label-desktop">TIMETABLE</span>
-                    <span class="nav-label-mobile">SCHEDULE</span>
-                    <span class="nav-active-dot">▪</span>
-                </a>
-                <a class="nav-item" data-view="viewAnalytics" onclick="navigate('viewAnalytics')" title="Energy & SDG 7">
-                    <span class="nav-label-desktop">ANALYTICS</span>
-                    <span class="nav-label-mobile">ECO IMPACT</span>
-                    <span class="nav-active-dot">▪</span>
-                </a>
-                <a id="navItemDiagnostics" class="nav-item" data-view="viewDiagnostics" onclick="navigate('viewDiagnostics')" title="Diagnostics">
-                    <span class="nav-label-desktop">DIAGNOSTICS</span>
-                    <span class="nav-label-mobile">DIAGNOSTICS</span>
-                    <span class="nav-active-dot">▪</span>
-                </a>
-            </nav>
-
-            <div class="sidebar-footer">
-                <div class="sidebar-footer-content">
-                    <div class="sidebar-meta-block">
-                        <div class="sidebar-meta-label">(EMAIL)</div>
-                        <a href="mailto:whois@imankh.me" class="sidebar-email-val">whois@imankh.me</a>
+            <!-- MOBILE FOOTER META (VISIBLE ON MOBILE ONLY) -->
+            <footer class="mobile-footer-meta">
+                <div class="mobile-footer-card">
+                    <div class="mobile-meta-item">
+                        <span class="mobile-meta-lbl">(EMAIL)</span>
+                        <a href="mailto:whois@imankh.me" class="mobile-meta-email">whois@imankh.me</a>
                     </div>
-                    <div class="sidebar-meta-block">
-                        <div class="sidebar-meta-label">(LINKS)</div>
-                        <div class="sidebar-links-row">
-                            <a href="https://github.com/near-link/switch-zlatan" target="_blank" rel="noopener noreferrer" class="sidebar-repo-link">GitHub ↗</a>
+                    <div class="mobile-meta-item">
+                        <span class="mobile-meta-lbl">(LINKS)</span>
+                        <a href="https://github.com/near-link/switch-zlatan" target="_blank" rel="noopener noreferrer" class="mobile-meta-link">GitHub ↗</a>
+                    </div>
+                    <div class="mobile-meta-item" style="margin-top:0.4rem; padding-top:0.4rem; border-top:1px dashed rgba(255,255,255,0.08);">
+                        <div style="display:flex; align-items:center; gap:0.4rem; font-size:0.68rem; color:#888; font-weight:700;">
+                            <div class="hw-dot"></div>
+                            <span>ONLINE // VIRTUAL</span>
                         </div>
                     </div>
-                    <div class="sidebar-telemetry-tag">
-                        <div id="sidebarHwDot" class="hw-dot"></div>
-                        <span id="sidebarHwText">ONLINE</span>
-                        <span style="color:#555;">//</span>
-                        <span id="sidebarHwLinkText">VIRTUAL</span>
-                    </div>
                 </div>
-            </div>
-        </aside>
+            </footer>
+        </main>
     </div>
 
     <!-- MODAL: IMPORT FROM I-MA'LUUM -->
@@ -722,6 +741,6 @@
 
     <div id="toastContainer"></div>
 
-    <script src="/static/app.js?v=5.4"></script>
+    <script src="/static/app.js?v=5.5"></script>
 </body>
 </html>

@@ -186,7 +186,7 @@ function navigate(viewId) {
     });
 
     const meta = {
-        viewConsole: { tag: "SEC.01", title: "HARDWARE DIGITAL TWIN & CONTROLS" },
+        viewConsole: { tag: "SEC.01", title: "HARDWARE CONSOLE" },
         viewTimetable: { tag: "SEC.02", title: "CAMPUS TIMETABLE MATRIX // 1-CLICK SCHEDULER" },
         viewAnalytics: { tag: "SEC.03", title: "ENERGY CONSERVATION & SDG 7 METRICS" },
         viewDiagnostics: { tag: "SEC.04", title: "EDGE GATEWAY SERIAL TELEMETRY STREAM" }

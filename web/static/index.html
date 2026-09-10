@@ -395,126 +395,209 @@
                 </div>
             </div> <!-- /.console-main-area -->
 
-            <!-- RIGHT: 1/3 Width Tactical In-Wall Microcontroller Faceplate Partition -->
+            <!-- RIGHT: Tactical In-Wall Microcontroller Hardware Twin Station -->
             <aside class="hardware-twin-partition" id="hardwareTwinPartition">
                 <div class="b-panel hw-faceplate-panel">
+                    <!-- Faceplate Header Bar -->
                     <div class="b-panel-header hw-faceplate-header">
                         <div>
-                            <span class="hw-plate-id">E1-2-14 // IN-WALL HARDWARE TWIN</span>
-                            <div class="hw-plate-sub">MICROCHIP ATMEGA328P // 5V LOGIC // 16MHZ</div>
+                            <div class="hw-plate-id">MICROCHIP ATMEGA328P // HARDWARE DIGITAL TWIN</div>
+                            <div class="hw-plate-sub">16MHZ // 5V LOGIC // SN74HC595 SHIFT REGISTER // 250HZ POV</div>
                         </div>
                         <div class="hw-plate-badge-group">
-                            <span id="twinBadgeMode" class="meta-badge" style="background:#001a11; color:#00ff88; border:1px solid #00aa55;">DIGITAL TWIN [SIM]</span>
+                            <span id="twinBadgeMode" class="meta-badge" style="background:#001a11; color:#00ff88; border:1px solid #00aa55;">DIGITAL TWIN [ACTIVE]</span>
+                        </div>
+                    </div>
+
+                    <!-- Model Selector Tab Controls -->
+                    <div class="hw-model-tabs-bar">
+                        <div class="hw-model-tabs-label">HARDWARE MODEL VIEW:</div>
+                        <div class="segmented-control" style="flex:1;">
+                            <button id="tabModelBench" class="segmented-btn active" onclick="switchHardwareModel('bench')">
+                                BENCH PROTOTYPE [UNO R3]
+                            </button>
+                            <button id="tabModelWall" class="segmented-btn" onclick="switchHardwareModel('wall')">
+                                IN-WALL FACEPLATE [86X86]
+                            </button>
                         </div>
                     </div>
 
                     <div class="b-panel-body hw-faceplate-body">
-                        <!-- 5641AS 4-Digit 7-Segment Display Module -->
-                        <div class="hw-subsystem-box">
-                            <div class="hw-box-label">DISPLAY // 5641AS 4-DIGIT 7-SEGMENT LED (74HC595)</div>
-                            <div class="seven-seg-bezel">
-                                <div class="seven-seg-glass">
-                                    <div id="sevenSegDisplay" class="seven-seg-digits">07:45</div>
-                                    <div class="seven-seg-subtext">250HZ POV MULTIPLEX // DIGIT 2 SYNC COLON</div>
+                        <!-- High-Fidelity Photographic Hardware Visual Stage -->
+                        <div class="hw-visual-stage-container">
+                            <div class="hw-visual-stage model-bench" id="hwVisualStage" data-active-model="bench">
+                                <!-- Precision Tactical Markings & Crosshairs -->
+                                <div class="hw-crosshair ch-tl">+</div>
+                                <div class="hw-crosshair ch-tr">+</div>
+                                <div class="hw-crosshair ch-bl">+</div>
+                                <div class="hw-crosshair ch-br">+</div>
+                                <div class="hw-stage-watermark">特務機関 NERV // HARDWARE TWIN NODE 01</div>
+
+                                <!-- Millimeter Ruler Markings -->
+                                <div class="hw-ruler-tape-h">
+                                    <span>0MM</span><span>25MM</span><span>50MM</span><span>75MM</span><span>100MM</span>
+                                </div>
+                                <div class="hw-ruler-tape-v">
+                                    <span>0MM</span><span>25MM</span><span>50MM</span><span>75MM</span><span>100MM</span>
+                                </div>
+
+                                <!-- Photographic Hardware Model Images -->
+                                <img id="hwImgBench" class="hw-model-img active" src="/static/img/switch_bench_model.jpg" alt="Physical Hardware Bench Prototype">
+                                <img id="hwImgWall" class="hw-model-img" src="/static/img/switch_wall_faceplate.jpg" alt="In-Wall Switch Architectural Faceplate">
+
+                                <!-- Interactive HUD Overlays (Positioned by CSS according to active model) -->
+                                <!-- 1. 5641AS 7-Segment Digital Display Screen Overlay -->
+                                <div class="hw-overlay-display" id="hwOverlayDisplay" title="5641AS 4-Digit 7-Segment Multiplexed LED Display">
+                                    <div class="seven-seg-glass">
+                                        <div id="sevenSegDisplay" class="seven-seg-digits">07:45</div>
+                                    </div>
+                                </div>
+
+                                <!-- 2. Three Diffused 5mm Optical LED Lens Flares -->
+                                <div class="hw-overlay-led led-yellow" id="hwLedYellow" title="PIN 13 // LIGHTING RELAY (480W)"></div>
+                                <div class="hw-overlay-led led-blue" id="hwLedBlue" title="PIN 12 // HVAC RELAY (2200W)"></div>
+                                <div class="hw-overlay-led led-red active" id="hwLedRed" title="PIN 11 // STANDBY RELAY &amp; GRACE BLINK"></div>
+
+                                <!-- 3. Interactive Tactile Pushbutton Click Hotspots -->
+                                <div class="hw-overlay-btn btn-1" id="hwBtn1"
+                                     onmousedown="hwButtonDown(1)" onmouseup="hwButtonUp(1)" onclick="hwButtonClick(1)"
+                                     title="PIN 10 // BTN 1: OVERRIDE (Tap: Toggle / Hold: Presentation 120m)">
+                                    <div class="hw-btn-reticle"></div>
+                                    <span class="hw-btn-tag">BTN 1</span>
+                                </div>
+                                <div class="hw-overlay-btn btn-2" id="hwBtn2"
+                                     onmousedown="hwButtonDown(2)" onmouseup="hwButtonUp(2)" onclick="hwButtonClick(2)"
+                                     title="PIN 9 // BTN 2: ACCEL (Tap: +1m / Hold: 60x-600x)">
+                                    <div class="hw-btn-reticle"></div>
+                                    <span class="hw-btn-tag">BTN 2</span>
+                                </div>
+                                <div class="hw-overlay-btn btn-3" id="hwBtn3"
+                                     onmousedown="hwButtonDown(3)" onmouseup="hwButtonUp(3)" onclick="hwButtonClick(3)"
+                                     title="PIN 2 // BTN 3: DAY SWITCH (Tap: Peek Day / Hold: Advance Day)">
+                                    <div class="hw-btn-reticle"></div>
+                                    <span class="hw-btn-tag">BTN 3</span>
+                                </div>
+
+                                <!-- 4. Piezo Buzzer Acoustic Ripple Overlay -->
+                                <div class="hw-overlay-buzzer" id="buzzerGrill" title="PIN 3 // 5V PASSIVE PIEZO TRANSDUCER (PWM)">
+                                    <div class="buzzer-ripple-ring ring-1"></div>
+                                    <div class="buzzer-ripple-ring ring-2"></div>
+                                    <div class="buzzer-ripple-ring ring-3"></div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Actuators: 3 Diffused 5mm LEDs Array -->
+                        <!-- Direct Tactile Actuation Deck -->
                         <div class="hw-subsystem-box">
-                            <div class="hw-box-label">ACTUATORS // 5MM DIFFUSED LED ARRAY</div>
-                            <div class="led-array-rack">
-                                <div class="led-cluster">
-                                    <div id="hwLedYellow" class="diffused-led led-yellow"></div>
-                                    <div class="led-info">
-                                        <span class="led-pin">PIN 13</span>
-                                        <span class="led-name">LIGHTS</span>
-                                        <span id="hwLedYellowState" class="led-state">OFF</span>
+                            <div class="hw-box-label">DIRECT PHYSICAL ACTUATION // TACTILE MOMENTARY CONTROLS</div>
+                            <div class="hw-tactile-action-grid">
+                                <!-- Button 1 Actuator -->
+                                <div class="hw-tactile-action-card">
+                                    <div class="hw-act-header">
+                                        <span class="hw-act-pin">PIN 10</span>
+                                        <span class="hw-act-title">BTN 1 // OVERRIDE</span>
+                                    </div>
+                                    <div class="hw-act-actions">
+                                        <button class="btn btn-sm hw-action-tap-btn" onclick="hwButtonClick(1)">
+                                            TAP: TOGGLE
+                                        </button>
+                                        <button class="btn btn-sm hw-action-hold-btn" onclick="sendHardwareButton(1, 'hold'); playBuzzerTone(3200, 80);">
+                                            HOLD: PRES [120M]
+                                        </button>
                                     </div>
                                 </div>
-                                <div class="led-cluster">
-                                    <div id="hwLedBlue" class="diffused-led led-blue"></div>
-                                    <div class="led-info">
-                                        <span class="led-pin">PIN 12</span>
-                                        <span class="led-name">HVAC</span>
-                                        <span id="hwLedBlueState" class="led-state">OFF</span>
+
+                                <!-- Button 2 Actuator -->
+                                <div class="hw-tactile-action-card">
+                                    <div class="hw-act-header">
+                                        <span class="hw-act-pin">PIN 9</span>
+                                        <span class="hw-act-title">BTN 2 // CLOCK ACCEL</span>
+                                    </div>
+                                    <div class="hw-act-actions">
+                                        <button class="btn btn-sm hw-action-tap-btn" onclick="hwButtonClick(2)">
+                                            TAP: +1 MIN
+                                        </button>
+                                        <button class="btn btn-sm hw-action-hold-btn" onclick="sendHardwareButton(2, 'cycle'); playBuzzerTone(2600, 70);">
+                                            HOLD: 60X-600X
+                                        </button>
                                     </div>
                                 </div>
-                                <div class="led-cluster">
-                                    <div id="hwLedRed" class="diffused-led led-red active"></div>
-                                    <div class="led-info">
-                                        <span class="led-pin">PIN 11</span>
-                                        <span class="led-name">STANDBY</span>
-                                        <span id="hwLedRedState" class="led-state">ENERGIZED</span>
+
+                                <!-- Button 3 Actuator -->
+                                <div class="hw-tactile-action-card">
+                                    <div class="hw-act-header">
+                                        <span class="hw-act-pin">PIN 2</span>
+                                        <span class="hw-act-title">BTN 3 // DAY SELECT</span>
+                                    </div>
+                                    <div class="hw-act-actions">
+                                        <button class="btn btn-sm hw-action-tap-btn" onclick="hwButtonClick(3)">
+                                            TAP: PEEK DAY
+                                        </button>
+                                        <button class="btn btn-sm hw-action-hold-btn" onclick="sendHardwareButton(3, 'hold'); playBuzzerTone(3000, 100);">
+                                            HOLD: ADVANCE
+                                        </button>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Tactile Momentary Pushbuttons (Pins 10, 9, 2) -->
+                        <!-- Acoustic Transducer & Web Audio Bar -->
                         <div class="hw-subsystem-box">
-                            <div class="hw-box-label">INPUTS // 6X6MM TACTILE PUSHBUTTONS (INPUT_PULLUP)</div>
-                            <div class="hw-buttons-rack">
-                                <!-- Button 1: Override -->
-                                <div class="hw-btn-wrapper">
-                                    <button id="hwBtn1" class="hw-tactile-btn" onmousedown="hwButtonDown(1)" onmouseup="hwButtonUp(1)" onclick="hwButtonClick(1)" title="Tap: Manual Override / Hold: Presentation Mode">
-                                        <div class="btn-cap"></div>
-                                    </button>
-                                    <div class="btn-label-group">
-                                        <span class="btn-label-pin">PIN 10</span>
-                                        <span class="btn-label-title">BTN 1 // OVERRIDE</span>
-                                        <span class="btn-label-desc">TAP: TOGGLE // HOLD: PRES</span>
-                                    </div>
-                                </div>
-
-                                <!-- Button 2: Clock Speed Accel -->
-                                <div class="hw-btn-wrapper">
-                                    <button id="hwBtn2" class="hw-tactile-btn" onmousedown="hwButtonDown(2)" onmouseup="hwButtonUp(2)" onclick="hwButtonClick(2)" title="Tap: +1 Minute / Hold: Fast-Forward Acceleration">
-                                        <div class="btn-cap"></div>
-                                    </button>
-                                    <div class="btn-label-group">
-                                        <span class="btn-label-pin">PIN 9</span>
-                                        <span class="btn-label-title">BTN 2 // ACCEL</span>
-                                        <span class="btn-label-desc">TAP: +1M // HOLD: 60X-600X</span>
-                                    </div>
-                                </div>
-
-                                <!-- Button 3: Day Switch -->
-                                <div class="hw-btn-wrapper">
-                                    <button id="hwBtn3" class="hw-tactile-btn" onmousedown="hwButtonDown(3)" onmouseup="hwButtonUp(3)" onclick="hwButtonClick(3)" title="Tap: Peek Day / Hold: Advance Day">
-                                        <div class="btn-cap"></div>
-                                    </button>
-                                    <div class="btn-label-group">
-                                        <span class="btn-label-pin">PIN 2</span>
-                                        <span class="btn-label-title">BTN 3 // DAY SWITCH</span>
-                                        <span class="btn-label-desc">TAP: PEEK // HOLD: ADVANCE</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Passive Piezo Buzzer & Web Audio Synthesizer (Pin 3) -->
-                        <div class="hw-subsystem-box">
-                            <div class="hw-box-label">AUDIO // 5V PASSIVE PIEZO TRANSDUCER (PIN 3 PWM)</div>
+                            <div class="hw-box-label">ACOUSTIC TRANSDUCER // 5V PASSIVE PIEZO (PIN 3 PWM)</div>
                             <div class="buzzer-telemetry-row">
-                                <div class="buzzer-speaker-grill" id="buzzerGrill">
-                                    <div class="grill-ring ring-1"></div>
-                                    <div class="grill-ring ring-2"></div>
-                                    <div class="grill-center"></div>
-                                </div>
-                                <div class="buzzer-info">
+                                <div class="buzzer-sound-badge">
                                     <div class="buzzer-harmonic" id="buzzerHarmonicText">SILENT // 0 HZ</div>
-                                    <div class="buzzer-status-sub">TONE() SYNTHESIZER [800-3800HZ]</div>
+                                    <div class="buzzer-status-sub">SQUARE-WAVE TONE() SYNTHESIZER [800-3800HZ]</div>
                                 </div>
-                                <button id="btnToggleAudioSynth" class="btn btn-sm" style="padding:0.35rem 0.6rem; font-size:0.65rem; font-weight:800;" onclick="toggleAudioSynthesizer()">
-                                    BEEPER: MUTE
-                                </button>
+                                <div style="display:flex; gap:6px;">
+                                    <button class="btn btn-sm" onclick="playBuzzerTone(2400, 100)">TEST BEEP</button>
+                                    <button id="btnToggleAudioSynth" class="btn btn-sm" style="padding:0.35rem 0.6rem; font-size:0.65rem; font-weight:800;" onclick="toggleAudioSynthesizer()">
+                                        BEEPER: MUTE
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Live GPIO Logic States & Bus Telemetry -->
+                        <div class="hw-subsystem-box">
+                            <div class="hw-box-label">MICROCONTROLLER GPIO LOGIC MAP // PIN STATES</div>
+                            <div class="hw-gpio-grid">
+                                <div class="hw-gpio-cell">
+                                    <span class="gpio-pin">D13</span>
+                                    <span class="gpio-name">LIGHTS</span>
+                                    <span class="gpio-val" id="hwLedYellowState">OFF</span>
+                                </div>
+                                <div class="hw-gpio-cell">
+                                    <span class="gpio-pin">D12</span>
+                                    <span class="gpio-name">HVAC</span>
+                                    <span class="gpio-val" id="hwLedBlueState">OFF</span>
+                                </div>
+                                <div class="hw-gpio-cell">
+                                    <span class="gpio-pin">D11</span>
+                                    <span class="gpio-name">STANDBY</span>
+                                    <span class="gpio-val" id="hwLedRedState">ENERGIZED</span>
+                                </div>
+                                <div class="hw-gpio-cell">
+                                    <span class="gpio-pin">D10</span>
+                                    <span class="gpio-name">BTN 1</span>
+                                    <span class="gpio-val" id="hwBtn1State">PULLUP</span>
+                                </div>
+                                <div class="hw-gpio-cell">
+                                    <span class="gpio-pin">D9</span>
+                                    <span class="gpio-name">BTN 2</span>
+                                    <span class="gpio-val" id="hwBtn2State">PULLUP</span>
+                                </div>
+                                <div class="hw-gpio-cell">
+                                    <span class="gpio-pin">D2</span>
+                                    <span class="gpio-name">BTN 3</span>
+                                    <span class="gpio-val" id="hwBtn3State">PULLUP</span>
+                                </div>
                             </div>
                         </div>
 
                         <!-- Hardware Baseline Pinout Map -->
                         <div class="hw-plate-footer">
-                            <div style="color:var(--text-dim);">EEPROM: 7-DAY SCHEDULE MATRIX // AUTONOMOUS</div>
+                            <div style="color:var(--text-dim);">EEPROM: 7-DAY SCHEDULE MATRIX // AUTONOMOUS MODE ACTIVE</div>
                             <div style="color:var(--text-pure); font-weight:700;">ZLATANFC // SMART CAMPUS SDG 7 &amp; 9</div>
                         </div>
                     </div>

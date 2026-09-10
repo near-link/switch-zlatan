@@ -151,6 +151,14 @@ document.addEventListener("DOMContentLoaded", () => {
         applyTelemetry(window.INITIAL_HARDWARE);
     }
 
+    // Restore saved hardware digital twin perspective
+    try {
+        const savedModel = localStorage.getItem("switch_hw_model") || "bench";
+        switchHardwareModel(savedModel);
+    } catch (e) {
+        switchHardwareModel("bench");
+    }
+
     // 2. Setup Navigation & Routing
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get("room");
@@ -1348,6 +1356,29 @@ function playBuzzerTone(freq, durationMs = 60) {
     }
 }
 
+function switchHardwareModel(model) {
+    const stage = document.getElementById("hwVisualStage");
+    const imgBench = document.getElementById("hwImgBench");
+    const imgWall = document.getElementById("hwImgWall");
+    const tabBench = document.getElementById("tabModelBench");
+    const tabWall = document.getElementById("tabModelWall");
+
+    const isWall = (model === "wall");
+    if (stage) {
+        stage.classList.toggle("model-bench", !isWall);
+        stage.classList.toggle("model-wall", isWall);
+        stage.setAttribute("data-active-model", isWall ? "wall" : "bench");
+    }
+    if (imgBench) imgBench.classList.toggle("active", !isWall);
+    if (imgWall) imgWall.classList.toggle("active", isWall);
+    if (tabBench) tabBench.classList.toggle("active", !isWall);
+    if (tabWall) tabWall.classList.toggle("active", isWall);
+
+    try {
+        localStorage.setItem("switch_hw_model", isWall ? "wall" : "bench");
+    } catch (e) {}
+}
+
 function applySystemModeUI(mode, hwState) {
     const workspace = document.getElementById("consoleWorkspace");
     const badge = document.getElementById("systemModeBadge");
@@ -1388,9 +1419,31 @@ function applySystemModeUI(mode, hwState) {
 
 let btnHoldTimers = {};
 
+function triggerButtonPulse(btnId) {
+    const btn = document.getElementById(`hwBtn${btnId}`);
+    const gpioVal = document.getElementById(`hwBtn${btnId}State`);
+    if (btn) btn.classList.add("pressed");
+    if (gpioVal) {
+        gpioVal.textContent = "GND [LOW]";
+        gpioVal.style.color = "#ff4444";
+    }
+    setTimeout(() => {
+        if (btn) btn.classList.remove("pressed");
+        if (gpioVal) {
+            gpioVal.textContent = "PULLUP";
+            gpioVal.style.color = "#00ff88";
+        }
+    }, 250);
+}
+
 function hwButtonDown(btnId) {
     const btn = document.getElementById(`hwBtn${btnId}`);
     if (btn) btn.classList.add("pressed");
+    const gpioVal = document.getElementById(`hwBtn${btnId}State`);
+    if (gpioVal) {
+        gpioVal.textContent = "GND [LOW]";
+        gpioVal.style.color = "#ff4444";
+    }
     btnHoldTimers[btnId] = { start: Date.now(), held: false };
     const holdDuration = btnId === 3 ? 600 : (btnId === 1 ? 1200 : 1000);
 
@@ -1404,6 +1457,11 @@ function hwButtonDown(btnId) {
 function hwButtonUp(btnId) {
     const btn = document.getElementById(`hwBtn${btnId}`);
     if (btn) btn.classList.remove("pressed");
+    const gpioVal = document.getElementById(`hwBtn${btnId}State`);
+    if (gpioVal) {
+        gpioVal.textContent = "PULLUP";
+        gpioVal.style.color = "#00ff88";
+    }
     if (btnHoldTimers[btnId]) {
         clearTimeout(btnHoldTimers[btnId].timeout);
     }
@@ -1414,11 +1472,13 @@ function hwButtonClick(btnId) {
         btnHoldTimers[btnId].held = false;
         return; // Handled as hold
     }
+    triggerButtonPulse(btnId);
     sendHardwareButton(btnId, "tap");
     playBuzzerTone(2800, 30);
 }
 
 async function sendHardwareButton(btnId, action) {
+    triggerButtonPulse(btnId);
     try {
         await fetch("/api/hardware/button", {
             method: "POST",
@@ -1429,6 +1489,15 @@ async function sendHardwareButton(btnId, action) {
         console.error("Hardware button dispatch error:", e);
     }
 }
+
+window.switchHardwareModel = switchHardwareModel;
+window.applySystemModeUI = applySystemModeUI;
+window.hwButtonDown = hwButtonDown;
+window.hwButtonUp = hwButtonUp;
+window.hwButtonClick = hwButtonClick;
+window.sendHardwareButton = sendHardwareButton;
+window.toggleAudioSynthesizer = toggleAudioSynthesizer;
+window.playBuzzerTone = playBuzzerTone;
 
 
 async function fetchStatus() {

@@ -1432,30 +1432,6 @@ function applyTelemetry(data) {
         sideHwText.style.color = data.hardware_linked ? "#00ff88" : "#888888";
     }
 
-    // Update Sidebar Telemetry Deck
-    const sLights = document.getElementById("sideLedLights");
-    if (sLights) {
-        sLights.textContent = data.lights_on ? "ENERGIZED" : "STANDBY";
-        sLights.className = "side-ch-pill" + (data.lights_on ? " side-yellow" : "");
-    }
-    const sAC = document.getElementById("sideLedAC");
-    if (sAC) {
-        sAC.textContent = data.ac_on ? "ENERGIZED" : "STANDBY";
-        sAC.className = "side-ch-pill" + (data.ac_on ? " side-blue" : "");
-    }
-    const sStby = document.getElementById("sideLedStandby");
-    if (sStby) {
-        sStby.textContent = data.standby_on ? "ACTIVE" : "OFF";
-        sStby.className = "side-ch-pill" + (data.standby_on ? " side-red" : "");
-    }
-    const sLoad = document.getElementById("sideMetricLoad");
-    if (sLoad) {
-        let lWatts = 0;
-        if (data.lights_on) lWatts += 480;
-        if (data.ac_on) lWatts += 2200;
-        sLoad.textContent = `${lWatts} W`;
-    }
-
     // Simulated Beeper trigger when untethered
     if (!data.hardware_linked && data.buzzer_active && data.buzzer_freq) {
         const bTs = (data.last_buzzer && data.last_buzzer.timestamp) ? data.last_buzzer.timestamp : 0;

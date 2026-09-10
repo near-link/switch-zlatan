@@ -28,6 +28,42 @@ const CO2_PER_KWH = 0.694;    // kg CO2 per kWh
 const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
 const DAY_CODES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
+// GLOBAL AUTH FETCH INTERCEPTOR & SESSION MANAGEMENT
+const _nativeFetch = window.fetch;
+window.fetch = async function(resource, init = {}) {
+    init = init || {};
+    init.headers = init.headers || {};
+    const token = sessionStorage.getItem("switch_token") || window.switchToken;
+    if (token) {
+        if (init.headers instanceof Headers) {
+            if (!init.headers.has("Authorization")) {
+                init.headers.set("Authorization", `Bearer ${token}`);
+            }
+        } else if (Array.isArray(init.headers)) {
+            init.headers.push(["Authorization", `Bearer ${token}`]);
+        } else {
+            if (!init.headers["Authorization"]) {
+                init.headers["Authorization"] = `Bearer ${token}`;
+            }
+        }
+    }
+    const response = await _nativeFetch(resource, init);
+    const urlStr = typeof resource === 'string' ? resource : (resource?.url || '');
+    if (response.status === 401 && !urlStr.includes("/api/auth/verify")) {
+        sessionStorage.removeItem("switch_auth");
+        sessionStorage.removeItem("switch_token");
+        window.switchToken = null;
+        const overlay = document.getElementById("authOverlay");
+        if (overlay) overlay.style.display = "flex";
+        const input = document.getElementById("authPasswordInput");
+        if (input) {
+            input.value = "";
+            input.focus();
+        }
+    }
+    return response;
+};
+
 // AUTHENTICATION OVERLAY LOGIC
 async function verifyPassword() {
     const input = document.getElementById("authPasswordInput");
@@ -44,10 +80,20 @@ async function verifyPassword() {
         const data = await res.json();
         if (res.ok && data.authenticated) {
             sessionStorage.setItem("switch_auth", "true");
+            if (data.token) {
+                sessionStorage.setItem("switch_token", data.token);
+                window.switchToken = data.token;
+            }
             if (overlay) overlay.style.display = "none";
             if (errorMsg) errorMsg.style.display = "none";
+            if (typeof initWebSocket === "function" && (!ws || ws.readyState !== WebSocket.OPEN)) {
+                initWebSocket();
+            }
         } else {
-            if (errorMsg) errorMsg.style.display = "block";
+            if (errorMsg) {
+                errorMsg.innerText = (data && data.detail) ? data.detail.toUpperCase() : "ACCESS DENIED: INVALID PASSCODE";
+                errorMsg.style.display = "block";
+            }
             input.value = "";
             input.focus();
             input.style.borderColor = "#ff4444";
@@ -66,7 +112,12 @@ function checkAuthGate() {
     if (sessionStorage.getItem("switch_auth") === "true") {
         const overlay = document.getElementById("authOverlay");
         if (overlay) overlay.style.display = "none";
+        if (typeof initWebSocket === "function" && (!ws || ws.readyState !== WebSocket.OPEN)) {
+            initWebSocket();
+        }
     } else {
+        const overlay = document.getElementById("authOverlay");
+        if (overlay) overlay.style.display = "flex";
         const input = document.getElementById("authPasswordInput");
         if (input) setTimeout(() => input.focus(), 100);
     }
@@ -888,10 +939,20 @@ function pad(n) {
 // WEBSOCKET TELEMETRY & HARDWARE DIGITAL TWIN
 // =============================================================================
 function initWebSocket() {
+    if (sessionStorage.getItem("switch_auth") !== "true") {
+        return; // Do not connect WebSocket if unauthenticated
+    }
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/telemetry`;
+    const token = sessionStorage.getItem("switch_token") || window.switchToken || '';
+    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+    const wsUrl = `${protocol}//${window.location.host}/ws/telemetry${tokenQuery}`;
 
-    ws = new WebSocket(wsUrl);
+    try {
+        ws = new WebSocket(wsUrl);
+    } catch (e) {
+        console.warn("WebSocket init error:", e);
+        return;
+    }
 
     ws.onopen = () => {
         updateConnectionState(true);
@@ -900,7 +961,10 @@ function initWebSocket() {
     ws.onmessage = (event) => {
         try {
             const msg = JSON.parse(event.data);
-            if (msg.type === "telemetry" && msg.data) {
+            if (msg.type === "mode_change" && msg.mode) {
+                applySystemModeUI(msg.mode, msg.data);
+                if (msg.data) applyTelemetry(msg.data);
+            } else if (msg.type === "telemetry" && msg.data) {
                 applyTelemetry(msg.data);
             }
         } catch (e) {
@@ -908,9 +972,20 @@ function initWebSocket() {
         }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
         updateConnectionState(false);
-        setTimeout(initWebSocket, 2000);
+        if (event && event.code === 1008) {
+            // Policy violation / unauthorized
+            sessionStorage.removeItem("switch_auth");
+            sessionStorage.removeItem("switch_token");
+            window.switchToken = null;
+            const overlay = document.getElementById("authOverlay");
+            if (overlay) overlay.style.display = "flex";
+            return;
+        }
+        if (sessionStorage.getItem("switch_auth") === "true") {
+            setTimeout(initWebSocket, 2000);
+        }
     };
 
     ws.onerror = () => {
@@ -1182,7 +1257,179 @@ function applyTelemetry(data) {
         p2.textContent = data.day ? `DAY ${data.day}` : "READY";
         p2.classList.toggle("active", true);
     }
+
+    // --- 1/3 Width Tactical Hardware Digital Twin Telemetry ---
+    if (data.mode) {
+        applySystemModeUI(data.mode, data);
+    }
+
+    // 5641AS 7-Segment Display Module Readout
+    const sevenSeg = document.getElementById("sevenSegDisplay");
+    if (sevenSeg) {
+        if (data.display_digits) {
+            sevenSeg.textContent = data.display_digits;
+        } else if (data.time) {
+            sevenSeg.textContent = data.time.slice(0, 5);
+        }
+    }
+
+    // 5mm Diffused LEDs Array
+    const hwLedYellow = document.getElementById("hwLedYellow");
+    const hwLedBlue = document.getElementById("hwLedBlue");
+    const hwLedRed = document.getElementById("hwLedRed");
+    const hwLedYellowState = document.getElementById("hwLedYellowState");
+    const hwLedBlueState = document.getElementById("hwLedBlueState");
+    const hwLedRedState = document.getElementById("hwLedRedState");
+
+    if (hwLedYellow) {
+        hwLedYellow.classList.toggle("active", !!data.lights_on);
+        if (hwLedYellowState) hwLedYellowState.textContent = data.lights_on ? "ENERGIZED" : "OFF";
+    }
+    if (hwLedBlue) {
+        hwLedBlue.classList.toggle("active", !!data.ac_on);
+        if (hwLedBlueState) hwLedBlueState.textContent = data.ac_on ? "ENERGIZED" : "OFF";
+    }
+    if (hwLedRed) {
+        hwLedRed.classList.toggle("active", !!data.standby_on);
+        if (hwLedRedState) hwLedRedState.textContent = data.standby_on ? "ENERGIZED" : "STANDBY";
+    }
+
+    // Piezo Buzzer Transducer (Pin 3 PWM)
+    const grill = document.getElementById("buzzerGrill");
+    const harmonicText = document.getElementById("buzzerHarmonicText");
+    if (grill) {
+        grill.classList.toggle("active", !!data.buzzer_active);
+    }
+    if (harmonicText) {
+        if (data.buzzer_active && data.buzzer_freq) {
+            harmonicText.textContent = `${data.buzzer_freq} HZ ACTIVE`;
+            playBuzzerTone(data.buzzer_freq, 60);
+        } else {
+            harmonicText.textContent = "SILENT // 0 HZ";
+        }
+    }
 }
+
+// =========================================================================
+// HARDWARE DIGITAL TWIN CONTROLS & WEB AUDIO SYNTHESIZER
+// =========================================================================
+let audioCtx = null;
+window.audioMuted = true;
+
+function toggleAudioSynthesizer() {
+    window.audioMuted = !window.audioMuted;
+    const btn = document.getElementById("btnToggleAudioSynth");
+    if (btn) {
+        btn.textContent = window.audioMuted ? "BEEPER: MUTE" : "BEEPER: ON";
+        btn.classList.toggle("btn-primary", !window.audioMuted);
+    }
+    if (!window.audioMuted && !audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+}
+
+function playBuzzerTone(freq, durationMs = 60) {
+    if (window.audioMuted) return;
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "square"; // Realistic square harmonic of 5V passive piezo
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + (durationMs / 1000.0));
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + (durationMs / 1000.0));
+    } catch (e) {
+        console.debug("Web audio tone error:", e);
+    }
+}
+
+function applySystemModeUI(mode, hwState) {
+    const workspace = document.getElementById("consoleWorkspace");
+    const badge = document.getElementById("systemModeBadge");
+    const sideMode = document.getElementById("sidebarModeText");
+
+    if (mode === "physical") {
+        if (workspace) {
+            workspace.classList.remove("mode-twin");
+            workspace.classList.add("mode-physical");
+        }
+        if (badge) {
+            badge.textContent = "MODE: PHYSICAL BENCH";
+            badge.style.borderColor = "#ffaa00";
+            badge.style.color = "#ffaa00";
+            badge.style.background = "#221100";
+        }
+        if (sideMode) {
+            sideMode.textContent = "PHYSICAL BENCH";
+            sideMode.style.color = "#ffaa00";
+        }
+    } else {
+        if (workspace) {
+            workspace.classList.remove("mode-physical");
+            workspace.classList.add("mode-twin");
+        }
+        if (badge) {
+            badge.textContent = "MODE: DIGITAL TWIN";
+            badge.style.borderColor = "#00aa55";
+            badge.style.color = "#00ff88";
+            badge.style.background = "#001a11";
+        }
+        if (sideMode) {
+            sideMode.textContent = "DIGITAL TWIN";
+            sideMode.style.color = "#00ff88";
+        }
+    }
+}
+
+let btnHoldTimers = {};
+
+function hwButtonDown(btnId) {
+    const btn = document.getElementById(`hwBtn${btnId}`);
+    if (btn) btn.classList.add("pressed");
+    btnHoldTimers[btnId] = { start: Date.now(), held: false };
+    const holdDuration = btnId === 3 ? 600 : (btnId === 1 ? 1200 : 1000);
+
+    btnHoldTimers[btnId].timeout = setTimeout(() => {
+        btnHoldTimers[btnId].held = true;
+        sendHardwareButton(btnId, "hold");
+        playBuzzerTone(3200, 80);
+    }, holdDuration);
+}
+
+function hwButtonUp(btnId) {
+    const btn = document.getElementById(`hwBtn${btnId}`);
+    if (btn) btn.classList.remove("pressed");
+    if (btnHoldTimers[btnId]) {
+        clearTimeout(btnHoldTimers[btnId].timeout);
+    }
+}
+
+function hwButtonClick(btnId) {
+    if (btnHoldTimers[btnId] && btnHoldTimers[btnId].held) {
+        btnHoldTimers[btnId].held = false;
+        return; // Handled as hold
+    }
+    sendHardwareButton(btnId, "tap");
+    playBuzzerTone(2800, 30);
+}
+
+async function sendHardwareButton(btnId, action) {
+    try {
+        await fetch("/api/hardware/button", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ button_id: btnId, action: action })
+        });
+    } catch (e) {
+        console.error("Hardware button dispatch error:", e);
+    }
+}
+
 
 async function fetchStatus() {
     try {

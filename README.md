@@ -270,6 +270,7 @@ Detailed engineering references, schematics, and presentation runbooks are locat
 | [docs/DEMO_PRESETS_GUIDE.md](docs/DEMO_PRESETS_GUIDE.md) | Six evaluator test scenarios (Morning Class, Fast-Forward, Pre-cool, Grace Period, Weekend Off, Force ON) |
 | [docs/SMART_SWITCH_EXECUTIVE_GUIDE.md](docs/SMART_SWITCH_EXECUTIVE_GUIDE.md) | Executive summary, commercial business case, university ROI models, and SDG mapping |
 | [docs/circuit_diagrams.pdf](docs/circuit_diagrams.pdf) | Official 4-page publication-grade circuit schematic documentation |
+| [docs/SECURITY_ARCHITECTURE.md](docs/SECURITY_ARCHITECTURE.md) | Full security architecture, edge gateway HMAC authentication, and cloud reverse proxy specs |
 
 ---
 
@@ -306,6 +307,7 @@ automated-in-wall-switch/
 │   ├── DEMO_OVERVIEW.md              # Live demonstration quick-reference
 │   ├── DEMO_PRESETS_GUIDE.md         # Evaluator scenario presets and presentation scripts
 │   ├── SMART_SWITCH_EXECUTIVE_GUIDE.md # SDG alignment and executive summary
+│   ├── SECURITY_ARCHITECTURE.md      # Security architecture, edge HMAC auth & reverse proxy specs
 │   └── circuit_diagrams.pdf         # 4-page full engineering schematic PDF
 │
 ├── assets/                           # Schematics and Visual Artifacts

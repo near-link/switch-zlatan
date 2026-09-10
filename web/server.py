@@ -7,13 +7,19 @@ Provides REST API, real-time WebSocket telemetry streaming, and serves the web f
 import os
 import re
 import hmac
+import hashlib
+import secrets
 import asyncio
 import logging
 import json
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Request
+from fastapi import (
+    FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Request,
+    Response, Cookie, Header, Depends, status
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from pydantic import BaseModel, Field
@@ -45,18 +51,134 @@ async def add_security_headers(request: Request, call_next):
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 bridge = ArduinoSerialBridge()
 
+# Cryptographic Session Management
+SESSION_SECRET = os.getenv("SESSION_SECRET", "smart-switch-secure-salt-2026-evangelion")
+
+def generate_session_token() -> str:
+    ts_str = str(int(datetime.now(timezone.utc).timestamp()))
+    nonce = secrets.token_hex(8)
+    data = f"{ts_str}:{nonce}"
+    sig = hmac.new(SESSION_SECRET.encode(), data.encode(), hashlib.sha256).hexdigest()
+    return f"{data}:{sig}"
+
+def verify_session_token(token: Optional[str]) -> bool:
+    if not token or token.count(":") != 2:
+        return False
+    try:
+        ts_str, nonce, sig = token.split(":")
+        ts = int(ts_str)
+        now = int(datetime.now(timezone.utc).timestamp())
+        # Valid for 7 days (604800 seconds)
+        if abs(now - ts) > 7 * 86400:
+            return False
+        data = f"{ts_str}:{nonce}"
+        expected = hmac.new(SESSION_SECRET.encode(), data.encode(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(sig, expected)
+    except Exception:
+        return False
+
+async def require_auth(
+    request: Request,
+    switch_session: Optional[str] = Cookie(default=None),
+    authorization: Optional[str] = Header(default=None)
+):
+    token = switch_session
+    if not token and authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+    if not token and "token" in request.query_params:
+        token = request.query_params["token"]
+    if not verify_session_token(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please enter switch passcode."
+        )
+    return True
+
+# In-memory brute-force rate limiter for passcode verification
+# Tracks failed attempts per client IP. Max 5 failures in 60s -> 60s lockout.
+_auth_failures: Dict[str, List[float]] = {}
+_auth_lockouts: Dict[str, float] = {}
+
+def get_client_ip(request: Request) -> str:
+    x_forwarded_for = request.headers.get("x-forwarded-for")
+    if x_forwarded_for:
+        return x_forwarded_for.split(",")[0].strip()
+    x_real_ip = request.headers.get("x-real-ip")
+    if x_real_ip:
+        return x_real_ip.strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return "127.0.0.1"
+
+def check_auth_rate_limit(client_ip: str) -> Optional[int]:
+    now = time.time()
+    if client_ip in _auth_lockouts:
+        lockout_until = _auth_lockouts[client_ip]
+        if now < lockout_until:
+            return max(1, int(lockout_until - now))
+        del _auth_lockouts[client_ip]
+        _auth_failures[client_ip] = []
+
+    failures = [t for t in _auth_failures.get(client_ip, []) if now - t < 60.0]
+    _auth_failures[client_ip] = failures
+    if len(failures) >= 5:
+        _auth_lockouts[client_ip] = now + 60.0
+        return 60
+    return None
+
+def record_auth_failure(client_ip: str):
+    now = time.time()
+    failures = [t for t in _auth_failures.get(client_ip, []) if now - t < 60.0]
+    failures.append(now)
+    _auth_failures[client_ip] = failures
+    if len(failures) >= 5:
+        _auth_lockouts[client_ip] = now + 60.0
+        logger.warning(f"Auth rate limit triggered: IP {client_ip} locked out for 60 seconds")
+
+def record_auth_success(client_ip: str):
+    _auth_failures.pop(client_ip, None)
+    _auth_lockouts.pop(client_ip, None)
+
 class AuthVerifyModel(BaseModel):
     password: str
 
 @app.post("/api/auth/verify")
-async def verify_auth_endpoint(item: AuthVerifyModel):
+async def verify_auth_endpoint(item: AuthVerifyModel, request: Request, response: Response):
+    client_ip = get_client_ip(request)
+
+    lockout_remaining = check_auth_rate_limit(client_ip)
+    if lockout_remaining is not None:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "status": "error",
+                "authenticated": False,
+                "detail": f"RATE LIMIT: Too many failed attempts. Locked out for {lockout_remaining}s."
+            }
+        )
+
     expected = os.getenv("WEB_PASSWORD", "123").strip().encode("utf-8")
     provided = item.password.strip().encode("utf-8")
     if hmac.compare_digest(provided, expected):
-        return {"status": "success", "authenticated": True}
-    # Artificial delay against automated brute-force attempts
+        record_auth_success(client_ip)
+        token = generate_session_token()
+        response.set_cookie(
+            key="switch_session",
+            value=token,
+            httponly=True,
+            samesite="lax",
+            max_age=7 * 86400,
+            path="/"
+        )
+        return {"status": "success", "authenticated": True, "token": token}
+
+    record_auth_failure(client_ip)
+    # Artificial jitter against automated brute-force attempts
     await asyncio.sleep(0.3)
-    return JSONResponse(status_code=401, content={"status": "error", "authenticated": False, "detail": "Invalid passcode"})
+    return JSONResponse(
+        status_code=401,
+        content={"status": "error", "authenticated": False, "detail": "Invalid passcode"}
+    )
 
 # WebSocket Connection Manager
 class ConnectionManager:
@@ -100,11 +222,22 @@ def on_serial_telemetry(state: Dict[str, Any]):
         "data": state
     })
 
+def on_mode_change(new_mode: str):
+    """Callback fired when hardware mode changes (manual or heartbeat timeout)."""
+    manager.threadsafe_broadcast({
+        "type": "mode_change",
+        "mode": new_mode,
+        "data": bridge.get_state()
+    })
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
-    manager.set_loop(asyncio.get_event_loop())
+    loop = asyncio.get_event_loop()
+    manager.set_loop(loop)
+    bridge.set_loop(loop)
     bridge.register_callback(on_serial_telemetry)
+    bridge.register_mode_change_callback(on_mode_change)
     bridge.start()
     log_event("GATEWAY_START", "FastAPI Edge Gateway started and listening.")
     logger.info("Gateway initialization complete.")
@@ -116,6 +249,13 @@ async def shutdown_event():
     logger.info("Gateway stopped.")
 
 # --- Pydantic Models ---
+class SwitchModeModel(BaseModel):
+    mode: str = Field(..., pattern="^(twin|physical)$")
+
+class HardwareButtonModel(BaseModel):
+    button_id: int = Field(..., ge=1, le=3)
+    action: str = Field(default="tap", pattern="^(tap|hold|cycle)$")
+
 class ClassSessionModel(BaseModel):
     building: str = Field(default="KOE")
     level: int = Field(default=2)
@@ -203,7 +343,7 @@ async def get_status(room: str = "E1-2-14"):
 async def list_classes(room: str = "E1-2-14", day: Optional[int] = None):
     return get_classes(room=room, day_of_week=day)
 
-@app.post("/api/classes")
+@app.post("/api/classes", dependencies=[Depends(require_auth)])
 async def create_class_endpoint(item: ClassSessionModel):
     new_id = add_class_session(
         building=item.building,
@@ -218,12 +358,12 @@ async def create_class_endpoint(item: ClassSessionModel):
     )
     return {"status": "success", "session_id": new_id}
 
-@app.delete("/api/classes/{session_id}")
+@app.delete("/api/classes/{session_id}", dependencies=[Depends(require_auth)])
 async def delete_class_endpoint(session_id: int):
     delete_class_session(session_id)
     return {"status": "success", "deleted_id": session_id}
 
-@app.post("/api/timetable/toggle")
+@app.post("/api/timetable/toggle", dependencies=[Depends(require_auth)])
 async def toggle_slot_endpoint(item: ToggleSlotModel):
     result = toggle_period_slot(
         building=item.building,
@@ -236,7 +376,7 @@ async def toggle_slot_endpoint(item: ToggleSlotModel):
     )
     return result
 
-@app.post("/api/timetable/preset")
+@app.post("/api/timetable/preset", dependencies=[Depends(require_auth)])
 async def apply_preset_endpoint(item: PresetScheduleModel):
     affected = apply_preset_schedule(
         building=item.building,
@@ -247,7 +387,7 @@ async def apply_preset_endpoint(item: PresetScheduleModel):
     )
     return {"status": "success", "preset": item.preset, "affected_rooms": affected, "scope": item.scope}
 
-@app.post("/api/timetable/clear-scope")
+@app.post("/api/timetable/clear-scope", dependencies=[Depends(require_auth)])
 async def clear_scope_endpoint(item: ClearScopeModel):
     affected = clear_schedule_scope(
         building=item.building,
@@ -257,12 +397,12 @@ async def clear_scope_endpoint(item: ClearScopeModel):
     )
     return {"status": "success", "affected_rooms": affected, "scope": item.scope}
 
-@app.post("/api/classes/clear")
+@app.post("/api/classes/clear", dependencies=[Depends(require_auth)])
 async def clear_schedule_endpoint(room: str = "E1-2-14"):
     clear_room_schedule(room)
     return {"status": "success", "room": room}
 
-@app.post("/api/import/imaluum")
+@app.post("/api/import/imaluum", dependencies=[Depends(require_auth)])
 async def import_imaluum_endpoint(item: ImaluumImportModel):
     count = import_mock_imaluum(
         room=item.room,
@@ -279,7 +419,7 @@ async def import_imaluum_endpoint(item: ImaluumImportModel):
         "source": "imaluum.iium.edu.my"
     }
 
-@app.post("/api/policy")
+@app.post("/api/policy", dependencies=[Depends(require_auth)])
 async def update_policy_endpoint(item: PolicyUpdateModel):
     fom = item.force_on_minutes if item.force_on_minutes else 60
     update_policy(item.precool_minutes, item.grace_minutes, midnight_cutoff=item.midnight_cutoff, force_on_minutes=fom)
@@ -290,7 +430,7 @@ async def update_policy_endpoint(item: PolicyUpdateModel):
     bridge.send_command(f"SET_POLICY:{item.precool_minutes}:{item.grace_minutes}:{sh}:{sm}:{fom}")
     return {"status": "success", "policy": get_policy()}
 
-@app.post("/api/deploy")
+@app.post("/api/deploy", dependencies=[Depends(require_auth)])
 async def deploy_schedule_endpoint(room: str = "E1-2-14"):
     week_sched = get_full_week_schedule(room=room)
     is_poc = (room == "E1-2-14")
@@ -325,7 +465,7 @@ async def deploy_schedule_endpoint(room: str = "E1-2-14"):
             "message": f"Dispatched {len(week_sched['commands'])} commands to Edge Switch [{room}] via MQTT/TLS broker"
         }
 
-@app.post("/api/hardware/day")
+@app.post("/api/hardware/day", dependencies=[Depends(require_auth)])
 async def set_hardware_day_endpoint(day: str = Query(..., description="Day code e.g. MON, TUE, WED, THU, FRI, SAT, SUN")):
     success = bridge.set_switch_day(day)
     if success:
@@ -333,7 +473,7 @@ async def set_hardware_day_endpoint(day: str = Query(..., description="Day code 
         return {"status": "success", "day": day}
     raise HTTPException(status_code=503, detail="Serial connection unavailable.")
 
-@app.post("/api/clock/sync")
+@app.post("/api/clock/sync", dependencies=[Depends(require_auth)])
 async def sync_clock_endpoint():
     now = datetime.now()
     success = bridge.sync_time(now.hour, now.minute, now.second)
@@ -342,7 +482,7 @@ async def sync_clock_endpoint():
         return {"status": "success", "synced_time": now.strftime("%H:%M:%S")}
     raise HTTPException(status_code=503, detail="Serial connection unavailable.")
 
-@app.post("/api/clock/set")
+@app.post("/api/clock/set", dependencies=[Depends(require_auth)])
 async def set_clock_endpoint(item: ClockSetModel):
     if item.day:
         bridge.set_switch_day(item.day)
@@ -354,7 +494,7 @@ async def set_clock_endpoint(item: ClockSetModel):
         return {"status": "success", "set_time": time_str, "day": item.day}
     raise HTTPException(status_code=503, detail="Serial connection unavailable.")
 
-@app.post("/api/override/toggle")
+@app.post("/api/override/toggle", dependencies=[Depends(require_auth)])
 async def toggle_override_endpoint():
     success = bridge.manual_toggle()
     if success:
@@ -362,7 +502,7 @@ async def toggle_override_endpoint():
         return {"status": "success", "action": "toggled"}
     raise HTTPException(status_code=503, detail="Serial connection unavailable.")
 
-@app.post("/api/override/auto")
+@app.post("/api/override/auto", dependencies=[Depends(require_auth)])
 async def auto_mode_endpoint():
     success = bridge.auto_mode()
     if success:
@@ -370,7 +510,7 @@ async def auto_mode_endpoint():
         return {"status": "success", "action": "auto_mode"}
     raise HTTPException(status_code=503, detail="Serial connection unavailable.")
 
-@app.post("/api/override/force-on")
+@app.post("/api/override/force-on", dependencies=[Depends(require_auth)])
 async def force_on_endpoint(item: Optional[ForceOnModel] = None):
     policy = get_policy()
     default_mins = policy.get("force_on_minutes", 60)
@@ -381,7 +521,7 @@ async def force_on_endpoint(item: Optional[ForceOnModel] = None):
         return {"status": "success", "action": "force_on", "duration_minutes": mins}
     raise HTTPException(status_code=503, detail="Serial connection unavailable.")
 
-@app.post("/api/override/force-off")
+@app.post("/api/override/force-off", dependencies=[Depends(require_auth)])
 async def force_off_endpoint():
     success = bridge.force_off()
     if success:
@@ -389,7 +529,7 @@ async def force_off_endpoint():
         return {"status": "success", "action": "force_off"}
     raise HTTPException(status_code=503, detail="Serial connection unavailable.")
 
-@app.post("/api/override/presentation")
+@app.post("/api/override/presentation", dependencies=[Depends(require_auth)])
 async def presentation_endpoint():
     success = bridge.presentation_mode()
     if success:
@@ -397,7 +537,7 @@ async def presentation_endpoint():
         return {"status": "success", "action": "presentation"}
     raise HTTPException(status_code=503, detail="Serial connection unavailable.")
 
-@app.post("/api/speed")
+@app.post("/api/speed", dependencies=[Depends(require_auth)])
 async def set_speed_endpoint(item: SpeedSetModel):
     success = bridge.set_speed(item.factor)
     if success:
@@ -405,7 +545,7 @@ async def set_speed_endpoint(item: SpeedSetModel):
         return {"status": "success", "speed_factor": item.factor}
     raise HTTPException(status_code=503, detail="Serial connection unavailable.")
 
-@app.post("/api/hardware/beep")
+@app.post("/api/hardware/beep", dependencies=[Depends(require_auth)])
 async def beep_endpoint(freq: int = 2200, duration: int = 100):
     success = bridge.beep(freq=freq, duration=duration)
     if success:
@@ -413,7 +553,7 @@ async def beep_endpoint(freq: int = 2200, duration: int = 100):
         return {"status": "success", "action": "beep", "frequency": freq, "duration": duration}
     raise HTTPException(status_code=503, detail="Serial connection unavailable.")
 
-@app.post("/api/diagnostics/command")
+@app.post("/api/diagnostics/command", dependencies=[Depends(require_auth)])
 async def raw_command_endpoint(item: RawCommandModel):
     cmd = item.command.strip()
     if not re.match(r"^[A-Za-z0-9_:,\-\. ]+$", cmd) or len(cmd) > 64:
@@ -424,13 +564,72 @@ async def raw_command_endpoint(item: RawCommandModel):
         return {"status": "success", "command": cmd}
     raise HTTPException(status_code=503, detail="Serial connection unavailable.")
 
-@app.get("/api/logs")
+@app.get("/api/logs", dependencies=[Depends(require_auth)])
 async def get_logs_endpoint(limit: int = 50):
     return get_audit_logs(limit)
+
+# --- Remote Orchestration & Edge Control Endpoints ---
+@app.get("/api/control/status")
+async def get_control_status():
+    st = bridge.get_state()
+    return {
+        "status": "online",
+        "mode": bridge.mode,
+        "agent_connected": bridge.agent_connected,
+        "agent_usb_detected": bridge.agent_usb_detected,
+        "agent_port": bridge.agent_port,
+        "hardware_state": st
+    }
+
+@app.post("/api/control/mode")
+async def set_control_mode(item: SwitchModeModel):
+    success = bridge.set_mode(item.mode, reason="DASHBOARD_API")
+    if success:
+        log_event("MODE_SWITCH", f"Hardware mode set to: {item.mode}")
+        return {"status": "success", "mode": item.mode}
+    raise HTTPException(status_code=400, detail="Failed to transition hardware mode.")
+
+@app.post("/api/hardware/button")
+async def hardware_button_press_endpoint(item: HardwareButtonModel):
+    success = bridge.handle_hardware_button(item.button_id, item.action)
+    if success:
+        return {"status": "success", "button_id": item.button_id, "action": item.action}
+    raise HTTPException(status_code=400, detail="Button actuation rejected.")
+
+# --- Hardware Agent WebSocket Ingress (Laptop Tunnel) ---
+@app.websocket("/ws/hardware-edge")
+async def websocket_hardware_edge_endpoint(websocket: WebSocket):
+    token = websocket.query_params.get("token")
+    valid_tokens = [SESSION_SECRET, os.getenv("AGENT_SECRET_TOKEN", "smart-switch-secure-salt-2026-evangelion"), os.getenv("WEB_PASSWORD", "123")]
+    if token not in valid_tokens:
+        logger.warning(f"Unauthorized hardware agent connection attempt with token: {token}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await websocket.accept()
+    bridge.register_agent_socket(websocket)
+    logger.info("Hardware agent WebSocket tunnel opened successfully.")
+    try:
+        while True:
+            raw_msg = await websocket.receive_text()
+            try:
+                data = json.loads(raw_msg)
+                bridge.handle_agent_message(data)
+            except Exception as e:
+                logger.error(f"Error handling agent packet: {e}")
+    except WebSocketDisconnect:
+        bridge.unregister_agent_socket(websocket)
+    except Exception as e:
+        logger.error(f"Agent WebSocket connection exception: {e}")
+        bridge.unregister_agent_socket(websocket)
 
 # --- WebSocket Telemetry Stream ---
 @app.websocket("/ws/telemetry")
 async def websocket_telemetry_endpoint(websocket: WebSocket):
+    token = websocket.cookies.get("switch_session") or websocket.query_params.get("token")
+    if not verify_session_token(token):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
     await manager.connect(websocket)
     await websocket.send_json({
         "type": "telemetry",

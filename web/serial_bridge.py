@@ -1,41 +1,54 @@
 """
 web/serial_bridge.py
-Thread-safe background serial communication worker for Arduino Uno R3.
-Handles telemetry parsing, command transmission, and auto-reconnection on /dev/ttyACM0.
+Unified Hardware Dispatcher & Telemetry Bridge.
+Dynamically routes between the software Digital Twin simulator and the laptop hardware agent.
+Implements 10-second heartbeat failsafe auto-reversion, hotplug detection, and unified state caching.
 """
 
 import os
 import time
-import threading
+import json
 import logging
+import threading
 import glob
-from typing import Optional, Callable, Dict, Any
-import serial
-import serial.tools.list_ports
+from typing import Optional, Callable, Dict, Any, List
+import asyncio
+
+from web.digital_twin import DigitalSwitchSimulator
 
 logger = logging.getLogger("serial_bridge")
 logging.basicConfig(level=logging.INFO)
 
-class ArduinoSerialBridge:
-    def __init__(self, port: Optional[str] = None, baudrate: Optional[int] = None):
-        if port is None:
-            port = os.getenv("SERIAL_PORT", "/dev/ttyACM0")
-        if baudrate is None:
-            try:
-                baudrate = int(os.getenv("SERIAL_BAUD", "9600"))
-            except ValueError:
-                baudrate = 9600
-        self.port = port
-        self.baudrate = baudrate
-        self.ser: Optional[serial.Serial] = None
+class UnifiedHardwareDispatcher:
+    def __init__(self):
+        self.lock = threading.RLock()
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
         self.running = False
-        self.thread: Optional[threading.Thread] = None
-        self.lock = threading.Lock()
+        self.mode = os.getenv("HARDWARE_MODE", "twin") # 'twin' or 'physical'
+        
+        # Subsystems
+        self.simulator = DigitalSwitchSimulator()
+        self.telemetry_callbacks: List[Callable[[Dict[str, Any]], None]] = []
+        self.mode_change_callbacks: List[Callable[[str], None]] = []
 
-        # Telemetry State Cache
-        self.state: Dict[str, Any] = {
+        # Physical Hardware Agent State (from laptop via WebSocket)
+        self.agent_ws = None
+        self.agent_connected = False
+        self.agent_usb_detected = False
+        self.agent_port = "NONE"
+        self.agent_engaged = False
+        self.last_agent_heartbeat = 0.0
+
+        # Physical Direct Serial Fallback (if running locally on laptop with USB directly)
+        self.direct_ser = None
+        self.direct_port = os.getenv("SERIAL_PORT", "/dev/ttyACM0")
+        self.direct_baud = int(os.getenv("SERIAL_BAUD", "9600"))
+
+        # Physical Telemetry State Cache
+        self.physical_state: Dict[str, Any] = {
             "connected": False,
-            "port": port,
+            "hardware_type": "PHYSICAL_BENCH",
+            "port": "/dev/ttyACM0",
             "time": "--:--:--",
             "state": "DISCONNECTED",
             "lights_on": False,
@@ -46,104 +59,164 @@ class ArduinoSerialBridge:
             "timer_remaining_min": 0,
             "speed_factor": 1,
             "day": "MON",
-            "last_ack": None,
+            "day_num": 1,
+            "display_digits": "--:--",
+            "display_colon": True,
+            "buzzer_active": False,
+            "buzzer_freq": 0,
+            "last_buzzer": {"freq": 0, "duration_ms": 0, "timestamp": 0.0},
             "last_updated": 0
         }
 
-        self.telemetry_callbacks = []
-        self._override_lock_until = 0
+        # Watchdog Thread for 10s Heartbeat Timeout
+        self.watchdog_thread: Optional[threading.Thread] = None
 
     def register_callback(self, callback: Callable[[Dict[str, Any]], None]):
-        """Registers a callback function triggered on each parsed telemetry packet."""
         if callback not in self.telemetry_callbacks:
             self.telemetry_callbacks.append(callback)
 
-    def find_available_port(self) -> str:
-        """Finds active Arduino port or defaults to configured port."""
-        ports = [p.device for p in serial.tools.list_ports.comports()]
-        for p in ports:
-            if "ACM" in p or "USB" in p or "Arduino" in p:
-                return p
-        acm_list = glob.glob("/dev/ttyACM*")
-        if acm_list:
-            return acm_list[0]
-        return self.port
+    def register_mode_change_callback(self, callback: Callable[[str], None]):
+        if callback not in self.mode_change_callbacks:
+            self.mode_change_callbacks.append(callback)
+
+    def set_loop(self, loop: asyncio.AbstractEventLoop):
+        self.loop = loop
+
+    def _send_agent_json(self, payload: Dict[str, Any]):
+        if self.agent_ws:
+            if self.loop and self.loop.is_running():
+                asyncio.run_coroutine_threadsafe(self.agent_ws.send_json(payload), self.loop)
+            else:
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self.agent_ws.send_json(payload))
+                except Exception as e:
+                    logger.debug(f"Failed to schedule agent packet: {e}")
 
     def start(self):
-        """Starts the background serial communication thread."""
-        if self.running:
-            return
-        self.running = True
-        self.thread = threading.Thread(target=self._worker_loop, daemon=True, name="SerialBridgeWorker")
-        self.thread.start()
-        logger.info(f"ArduinoSerialBridge thread started for {self.port}")
+        with self.lock:
+            if self.running:
+                return
+            self.running = True
+
+            # Register simulator internal callback to route through dispatcher
+            self.simulator.register_callback(self._on_simulator_telemetry)
+            self.simulator.start()
+
+            # Start background watchdog for heartbeat & direct serial check
+            self.watchdog_thread = threading.Thread(
+                target=self._watchdog_loop, daemon=True, name="HardwareWatchdog"
+            )
+            self.watchdog_thread.start()
+            logger.info(f"UnifiedHardwareDispatcher started. Initial Mode: {self.mode}")
 
     def stop(self):
-        """Stops the worker thread and closes the serial port cleanly."""
-        self.running = False
-        if self.ser:
-            try:
-                self.ser.close()
-            except Exception:
-                pass
-            self.ser = None
-        self.state["connected"] = False
-        self.state["state"] = "DISCONNECTED"
+        with self.lock:
+            self.running = False
+            self.simulator.stop()
+            if self.direct_ser:
+                try:
+                    self.direct_ser.close()
+                except Exception:
+                    pass
+                self.direct_ser = None
 
-    def _connect(self) -> bool:
-        target_port = self.find_available_port()
-        try:
-            self.ser = serial.Serial(target_port, self.baudrate, timeout=0.2)
-            time.sleep(1.8)  # Allow Arduino bootloader to initialize
-            self.port = target_port
-            with self.lock:
-                self.state["connected"] = True
-                self.state["port"] = target_port
-            logger.info(f"Connected to Arduino Uno on {target_port} @ {self.baudrate} baud")
-            return True
-        except Exception as e:
-            with self.lock:
-                self.state["connected"] = False
-                self.state["state"] = "PORT_ERROR"
-            self.ser = None
-            return False
+    def _on_simulator_telemetry(self, sim_state: Dict[str, Any]):
+        if self.mode == "twin":
+            enriched = dict(sim_state)
+            enriched["mode"] = "twin"
+            enriched["agent_connected"] = self.agent_connected
+            enriched["agent_usb_detected"] = self.agent_usb_detected
+            enriched["agent_port"] = self.agent_port
+            for cb in self.telemetry_callbacks:
+                try:
+                    cb(enriched)
+                except Exception as e:
+                    logger.error(f"Error in telemetry callback: {e}")
 
-    def _worker_loop(self):
+    def _watchdog_loop(self):
         while self.running:
-            if not self.ser or not self.ser.is_open:
-                if not self._connect():
-                    time.sleep(2.0)
-                    continue
-
-            try:
-                raw_line = self.ser.readline()
-                if not raw_line:
-                    continue
-
-                line = raw_line.decode('utf-8', errors='ignore').strip()
-                if not line:
-                    continue
-
-                self._process_incoming_line(line)
-
-            except (serial.SerialException, OSError) as e:
-                logger.warning(f"Serial connection lost: {e}")
-                if self.ser:
-                    try:
-                        self.ser.close()
-                    except Exception:
+            time.sleep(1.0)
+            now = time.time()
+            with self.lock:
+                # 10s Heartbeat Check in Physical Mode
+                if self.mode == "physical":
+                    if self.agent_connected and (now - self.last_agent_heartbeat > 10.0):
+                        logger.warning("Laptop agent heartbeat lost (>10s). Auto-reverting to Digital Twin Mode!")
+                        self._internal_set_mode("twin", reason="HEARTBEAT_TIMEOUT")
+                    elif not self.agent_connected and not (self.direct_ser and self.direct_ser.is_open):
+                        # No physical bridge active at all
                         pass
-                    self.ser = None
-                with self.lock:
-                    self.state["connected"] = False
-                    self.state["state"] = "DISCONNECTED"
-                time.sleep(2.0)
-            except Exception as e:
-                logger.error(f"Unexpected error in serial worker: {e}")
-                time.sleep(0.5)
 
-    def _process_incoming_line(self, line: str):
-        # Telemetry packet: TLM:08:44:11,STATE,YELLOW,BLUE,RED,OVERRIDE,SPEED
+    def _internal_set_mode(self, new_mode: str, reason: str = "MANUAL") -> bool:
+        if new_mode not in ("twin", "physical"):
+            return False
+        old_mode = self.mode
+        self.mode = new_mode
+        logger.info(f"Hardware Mode Transition: {old_mode} -> {new_mode} (Reason: {reason})")
+
+        # Notify Agent if connected
+        if self.agent_ws:
+            action = "CONNECT_HARDWARE" if new_mode == "physical" else "DISCONNECT_HARDWARE"
+            self._send_agent_json({"action": action, "port": "/dev/ttyACM0"})
+
+        # Fire mode change callbacks to broadcast to UI
+        for cb in self.mode_change_callbacks:
+            try:
+                cb(new_mode)
+            except Exception as e:
+                logger.error(f"Error in mode change callback: {e}")
+
+        return True
+
+    def set_mode(self, new_mode: str, reason: str = "MANUAL") -> bool:
+        with self.lock:
+            return self._internal_set_mode(new_mode, reason)
+
+    # =========================================================================
+    # LAPPOINT AGENT WEBSOCKET INTERACTION (/ws/hardware-edge)
+    # =========================================================================
+    def register_agent_socket(self, ws):
+        with self.lock:
+            self.agent_ws = ws
+            self.agent_connected = True
+            self.last_agent_heartbeat = time.time()
+            logger.info("Laptop hardware agent registered!")
+            # If current mode is physical, immediately instruct it to lock serial
+            if self.mode == "physical":
+                self._send_agent_json({"action": "CONNECT_HARDWARE", "port": "/dev/ttyACM0"})
+
+    def unregister_agent_socket(self, ws):
+        with self.lock:
+            if self.agent_ws == ws:
+                self.agent_ws = None
+                self.agent_connected = False
+                self.agent_usb_detected = False
+                self.agent_engaged = False
+                logger.info("Laptop hardware agent disconnected.")
+                if self.mode == "physical":
+                    self._internal_set_mode("twin", reason="AGENT_DISCONNECT")
+
+    def handle_agent_message(self, data: Dict[str, Any]):
+        msg_type = data.get("type")
+        now = time.time()
+
+        if msg_type == "heartbeat":
+            with self.lock:
+                self.last_agent_heartbeat = now
+                self.agent_connected = True
+                self.agent_usb_detected = data.get("usb_detected", False)
+                self.agent_port = data.get("port", "NONE")
+                self.agent_engaged = data.get("engaged", False)
+
+        elif msg_type == "telemetry":
+            raw_line = data.get("line", "")
+            self._process_physical_telemetry_line(raw_line)
+
+        elif msg_type == "ack":
+            logger.info(f"Agent ACK: {data}")
+
+    def _process_physical_telemetry_line(self, line: str):
         if line.startswith("TLM:"):
             payload = line[4:]
             parts = payload.split(',')
@@ -157,8 +230,6 @@ class ArduinoSerialBridge:
                     override_code = int(parts[5])
                 except ValueError:
                     override_code = 1 if parts[5] == '1' else 0
-                override = (override_code != 0)
-
                 try:
                     speed = int(parts[6])
                 except ValueError:
@@ -170,156 +241,97 @@ class ArduinoSerialBridge:
                     timer_remaining = 0
 
                 with self.lock:
-                    if time.time() < self._override_lock_until:
-                        override = self.state.get("manual_override", override)
-                        override_code = self.state.get("override_mode", override_code)
-                        timer_remaining = self.state.get("timer_remaining_min", timer_remaining)
-                    self.state.update({
+                    self.physical_state.update({
                         "connected": True,
+                        "hardware_type": "PHYSICAL_BENCH",
+                        "port": self.agent_port,
                         "time": clock_time,
                         "state": sys_state,
                         "lights_on": yellow,
                         "ac_on": blue,
                         "standby_on": red,
-                        "manual_override": override,
+                        "manual_override": (override_code != 0),
                         "override_mode": override_code,
                         "timer_remaining_min": timer_remaining,
                         "speed_factor": speed,
                         "day": day,
+                        "display_digits": clock_time[:5],
+                        "display_colon": True,
                         "last_updated": time.time()
                     })
 
-                # Fire registered callbacks
-                state_copy = dict(self.state)
-                for cb in self.telemetry_callbacks:
-                    try:
-                        cb(state_copy)
-                    except Exception as e:
-                        logger.error(f"Error in telemetry callback: {e}")
+                if self.mode == "physical":
+                    enriched = dict(self.physical_state)
+                    enriched["mode"] = "physical"
+                    enriched["agent_connected"] = self.agent_connected
+                    enriched["agent_usb_detected"] = self.agent_usb_detected
+                    enriched["agent_port"] = self.agent_port
+                    for cb in self.telemetry_callbacks:
+                        try:
+                            cb(enriched)
+                        except Exception as e:
+                            logger.error(f"Error in physical telemetry callback: {e}")
 
-        elif line.startswith("OK:") or line.startswith("ERR:") or line.startswith("PONG:"):
-            with self.lock:
-                self.state["last_ack"] = line
-            logger.info(f"Arduino ACK: {line}")
-
+    # =========================================================================
+    # UNIFIED COMMAND DISPATCH
+    # =========================================================================
     def send_command(self, cmd: str) -> bool:
-        """Sends an ASCII command line to the Arduino."""
-        if not self.ser or not self.ser.is_open:
-            logger.warning(f"Cannot send command '{cmd}': Serial disconnected")
+        cmd = cmd.strip()
+        if not cmd:
             return False
 
-        try:
-            with self.lock:
-                self.ser.write((cmd.strip() + "\n").encode('utf-8'))
-                self.ser.flush()
-            logger.info(f"Sent Command -> {cmd}")
+        if self.mode == "twin":
+            res = self.simulator.handle_command(cmd)
+            return not res.startswith("ERR:")
+        else: # physical mode
+            if self.agent_ws:
+                self._send_agent_json({"action": "COMMAND", "cmd": cmd})
+                return True
+            return False
+
+    def handle_hardware_button(self, btn_id: int, action: str = "tap") -> bool:
+        """Interactive button actions for Buttons 1, 2, 3."""
+        if self.mode == "twin":
+            if btn_id == 1:
+                if action == "hold":
+                    self.simulator.btn1_hold()
+                else:
+                    self.simulator.btn1_tap()
+            elif btn_id == 2:
+                if action == "cycle":
+                    self.simulator.btn2_cycle_speed()
+                else:
+                    self.simulator.btn2_tap()
+            elif btn_id == 3:
+                if action == "hold":
+                    self.simulator.btn3_hold()
+                else:
+                    self.simulator.btn3_tap()
             return True
-        except Exception as e:
-            logger.error(f"Failed to send command '{cmd}': {e}")
+        else:
+            if btn_id == 1:
+                return self.send_command("PRESENTATION" if action == "hold" else "MANUAL_TOGGLE")
+            elif btn_id == 2:
+                return self.send_command("SET_SPEED:60")
+            elif btn_id == 3:
+                return self.send_command("SET_DAY:TUE")
             return False
 
-    def sync_time(self, hour: int, minute: int, second: int) -> bool:
-        cmd = f"SYNC:{hour:02d}:{minute:02d}:{second:02d}"
-        return self.send_command(cmd)
-
-    def set_schedule(self, sH1: int, sM1: int, eH1: int, eM1: int,
-                     sH2: int, sM2: int, eH2: int, eM2: int,
-                     precool: int, grace: int) -> bool:
-        cmd = f"SET_SCHED:{sH1}:{sM1}:{eH1}:{eM1}:{sH2}:{sM2}:{eH2}:{eM2}:{precool}:{grace}"
-        return self.send_command(cmd)
-
+    # Wrappers for existing server endpoints
     def force_on(self, minutes: int = 60) -> bool:
-        with self.lock:
-            self.state["manual_override"] = True
-            self.state["override_mode"] = 1
-            self.state["timer_remaining_min"] = minutes
-            self.state["lights_on"] = True
-            self.state["ac_on"] = True
-            self._override_lock_until = time.time() + 0.6
-        res = self.send_command(f"FORCE_ON:{minutes}")
-        if res:
-            state_copy = self.get_state()
-            for cb in self.telemetry_callbacks:
-                try:
-                    cb(state_copy)
-                except Exception as e:
-                    logger.error(f"Error in telemetry callback: {e}")
-        return res
+        return self.send_command(f"FORCE_ON:{minutes}")
 
     def force_off(self) -> bool:
-        with self.lock:
-            self.state["manual_override"] = True
-            self.state["override_mode"] = 2
-            self.state["timer_remaining_min"] = 0
-            self.state["lights_on"] = False
-            self.state["ac_on"] = False
-            self._override_lock_until = time.time() + 0.6
-        res = self.send_command("FORCE_OFF")
-        if res:
-            state_copy = self.get_state()
-            for cb in self.telemetry_callbacks:
-                try:
-                    cb(state_copy)
-                except Exception as e:
-                    logger.error(f"Error in telemetry callback: {e}")
-        return res
+        return self.send_command("FORCE_OFF")
 
     def presentation_mode(self) -> bool:
-        with self.lock:
-            self.state["manual_override"] = True
-            self.state["override_mode"] = 3
-            self.state["timer_remaining_min"] = 0
-            self.state["lights_on"] = False
-            self.state["ac_on"] = True
-            self._override_lock_until = time.time() + 0.6
-        res = self.send_command("PRESENTATION")
-        if res:
-            state_copy = self.get_state()
-            for cb in self.telemetry_callbacks:
-                try:
-                    cb(state_copy)
-                except Exception as e:
-                    logger.error(f"Error in telemetry callback: {e}")
-        return res
+        return self.send_command("PRESENTATION")
 
     def manual_toggle(self) -> bool:
-        with self.lock:
-            next_state = not self.state.get("manual_override", False)
-            self.state["manual_override"] = next_state
-            if next_state:
-                self.state["override_mode"] = 1
-                self.state["timer_remaining_min"] = 60
-                self.state["lights_on"] = True
-                self.state["ac_on"] = True
-            else:
-                self.state["override_mode"] = 0
-                self.state["timer_remaining_min"] = 0
-            self._override_lock_until = time.time() + 0.6
-        res = self.send_command("MANUAL_TOGGLE")
-        if res:
-            state_copy = self.get_state()
-            for cb in self.telemetry_callbacks:
-                try:
-                    cb(state_copy)
-                except Exception as e:
-                    logger.error(f"Error in telemetry callback: {e}")
-        return res
+        return self.send_command("MANUAL_TOGGLE")
 
     def auto_mode(self) -> bool:
-        with self.lock:
-            self.state["manual_override"] = False
-            self.state["override_mode"] = 0
-            self.state["timer_remaining_min"] = 0
-            self._override_lock_until = time.time() + 0.6
-        res = self.send_command("AUTO_MODE")
-        if res:
-            state_copy = self.get_state()
-            for cb in self.telemetry_callbacks:
-                try:
-                    cb(state_copy)
-                except Exception as e:
-                    logger.error(f"Error in telemetry callback: {e}")
-        return res
+        return self.send_command("AUTO_MODE")
 
     def set_speed(self, factor: int) -> bool:
         return self.send_command(f"SET_SPEED:{factor}")
@@ -330,13 +342,21 @@ class ArduinoSerialBridge:
     def set_switch_day(self, day: str) -> bool:
         return self.send_command(f"SET_DAY:{day}")
 
+    def sync_time(self, hour: int, minute: int, second: int) -> bool:
+        return self.send_command(f"SYNC:{hour:02d}:{minute:02d}:{second:02d}")
+
+    def set_schedule(self, sH1: int, sM1: int, eH1: int, eM1: int,
+                     sH2: int, sM2: int, eH2: int, eM2: int,
+                     precool: int, grace: int) -> bool:
+        return self.send_command(f"SET_SCHED:{sH1}:{sM1}:{eH1}:{eM1}:{sH2}:{sM2}:{eH2}:{eM2}:{precool}:{grace}")
+
     def deploy_week_schedule(self, commands: list) -> bool:
         all_ok = True
         for cmd in commands:
             ok = self.send_command(cmd)
             if not ok:
                 all_ok = False
-            time.sleep(0.04)  # Ensure Arduino UART buffer absorbs each command cleanly
+            time.sleep(0.04)
         return all_ok
 
     def ping(self) -> bool:
@@ -344,5 +364,16 @@ class ArduinoSerialBridge:
 
     def get_state(self) -> Dict[str, Any]:
         with self.lock:
-            return dict(self.state)
+            if self.mode == "twin":
+                st = self.simulator.get_state()
+            else:
+                st = dict(self.physical_state)
+            st["mode"] = self.mode
+            st["agent_connected"] = self.agent_connected
+            st["agent_usb_detected"] = self.agent_usb_detected
+            st["agent_port"] = self.agent_port
+            st["agent_engaged"] = self.agent_engaged
+            return st
 
+# Backwards compatibility alias for server.py import
+ArduinoSerialBridge = UnifiedHardwareDispatcher

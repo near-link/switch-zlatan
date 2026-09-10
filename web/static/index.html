@@ -91,6 +91,7 @@
                     <h2 class="topbar-title" id="screenTitle">HARDWARE DIGITAL TWIN &amp; CONTROLS</h2>
                 </div>
                 <div class="topbar-meta">
+                    <span class="meta-badge" id="systemModeBadge" style="background:#001a11; color:#00ff88; border:1px solid #00aa55; font-weight:800;">MODE: DIGITAL TWIN</span>
                     <span class="meta-badge" id="activeScopeBadge">SCOPE: ROOM</span>
                     <span class="meta-badge" id="activeRoomBadge">TARGET: E1-2-14 [POC]</span>
                     <span class="meta-badge" id="switchDayBadge" style="background:#000; color:#fff; border:1px solid #fff;">DAY: MON [DAY 1]</span>
@@ -102,8 +103,10 @@
                  SCREEN 01: HARDWARE DIGITAL TWIN & CONSOLE
                  =================================================================== -->
             <section id="viewConsole" class="screen-view active">
-                <!-- Campus Fleet Target & Controller Selector -->
-                <div class="b-panel target-fleet-panel">
+                <div class="console-workspace-layout mode-twin" id="consoleWorkspace">
+                    <div class="console-main-area">
+                        <!-- Campus Fleet Target & Controller Selector -->
+                        <div class="b-panel target-fleet-panel">
                     <div class="controller-fleet-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
                         <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
                             <span class="scope-label" style="font-size:0.68rem; margin:0;">ACTIVE CONTROLLER TARGET:</span>
@@ -390,7 +393,135 @@
                         <div id="pipeStandby" class="pipeline-step active">[ 6 ] POWER CUTOFF</div>
                     </div>
                 </div>
-            </section>
+            </div> <!-- /.console-main-area -->
+
+            <!-- RIGHT: 1/3 Width Tactical In-Wall Microcontroller Faceplate Partition -->
+            <aside class="hardware-twin-partition" id="hardwareTwinPartition">
+                <div class="b-panel hw-faceplate-panel">
+                    <div class="b-panel-header hw-faceplate-header">
+                        <div>
+                            <span class="hw-plate-id">E1-2-14 // IN-WALL HARDWARE TWIN</span>
+                            <div class="hw-plate-sub">MICROCHIP ATMEGA328P // 5V LOGIC // 16MHZ</div>
+                        </div>
+                        <div class="hw-plate-badge-group">
+                            <span id="twinBadgeMode" class="meta-badge" style="background:#001a11; color:#00ff88; border:1px solid #00aa55;">DIGITAL TWIN [SIM]</span>
+                        </div>
+                    </div>
+
+                    <div class="b-panel-body hw-faceplate-body">
+                        <!-- 5641AS 4-Digit 7-Segment Display Module -->
+                        <div class="hw-subsystem-box">
+                            <div class="hw-box-label">DISPLAY // 5641AS 4-DIGIT 7-SEGMENT LED (74HC595)</div>
+                            <div class="seven-seg-bezel">
+                                <div class="seven-seg-glass">
+                                    <div id="sevenSegDisplay" class="seven-seg-digits">07:45</div>
+                                    <div class="seven-seg-subtext">250HZ POV MULTIPLEX // DIGIT 2 SYNC COLON</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Actuators: 3 Diffused 5mm LEDs Array -->
+                        <div class="hw-subsystem-box">
+                            <div class="hw-box-label">ACTUATORS // 5MM DIFFUSED LED ARRAY</div>
+                            <div class="led-array-rack">
+                                <div class="led-cluster">
+                                    <div id="hwLedYellow" class="diffused-led led-yellow"></div>
+                                    <div class="led-info">
+                                        <span class="led-pin">PIN 13</span>
+                                        <span class="led-name">LIGHTS</span>
+                                        <span id="hwLedYellowState" class="led-state">OFF</span>
+                                    </div>
+                                </div>
+                                <div class="led-cluster">
+                                    <div id="hwLedBlue" class="diffused-led led-blue"></div>
+                                    <div class="led-info">
+                                        <span class="led-pin">PIN 12</span>
+                                        <span class="led-name">HVAC</span>
+                                        <span id="hwLedBlueState" class="led-state">OFF</span>
+                                    </div>
+                                </div>
+                                <div class="led-cluster">
+                                    <div id="hwLedRed" class="diffused-led led-red active"></div>
+                                    <div class="led-info">
+                                        <span class="led-pin">PIN 11</span>
+                                        <span class="led-name">STANDBY</span>
+                                        <span id="hwLedRedState" class="led-state">ENERGIZED</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tactile Momentary Pushbuttons (Pins 10, 9, 2) -->
+                        <div class="hw-subsystem-box">
+                            <div class="hw-box-label">INPUTS // 6X6MM TACTILE PUSHBUTTONS (INPUT_PULLUP)</div>
+                            <div class="hw-buttons-rack">
+                                <!-- Button 1: Override -->
+                                <div class="hw-btn-wrapper">
+                                    <button id="hwBtn1" class="hw-tactile-btn" onmousedown="hwButtonDown(1)" onmouseup="hwButtonUp(1)" onclick="hwButtonClick(1)" title="Tap: Manual Override / Hold: Presentation Mode">
+                                        <div class="btn-cap"></div>
+                                    </button>
+                                    <div class="btn-label-group">
+                                        <span class="btn-label-pin">PIN 10</span>
+                                        <span class="btn-label-title">BTN 1 // OVERRIDE</span>
+                                        <span class="btn-label-desc">TAP: TOGGLE // HOLD: PRES</span>
+                                    </div>
+                                </div>
+
+                                <!-- Button 2: Clock Speed Accel -->
+                                <div class="hw-btn-wrapper">
+                                    <button id="hwBtn2" class="hw-tactile-btn" onmousedown="hwButtonDown(2)" onmouseup="hwButtonUp(2)" onclick="hwButtonClick(2)" title="Tap: +1 Minute / Hold: Fast-Forward Acceleration">
+                                        <div class="btn-cap"></div>
+                                    </button>
+                                    <div class="btn-label-group">
+                                        <span class="btn-label-pin">PIN 9</span>
+                                        <span class="btn-label-title">BTN 2 // ACCEL</span>
+                                        <span class="btn-label-desc">TAP: +1M // HOLD: 60X-600X</span>
+                                    </div>
+                                </div>
+
+                                <!-- Button 3: Day Switch -->
+                                <div class="hw-btn-wrapper">
+                                    <button id="hwBtn3" class="hw-tactile-btn" onmousedown="hwButtonDown(3)" onmouseup="hwButtonUp(3)" onclick="hwButtonClick(3)" title="Tap: Peek Day / Hold: Advance Day">
+                                        <div class="btn-cap"></div>
+                                    </button>
+                                    <div class="btn-label-group">
+                                        <span class="btn-label-pin">PIN 2</span>
+                                        <span class="btn-label-title">BTN 3 // DAY SWITCH</span>
+                                        <span class="btn-label-desc">TAP: PEEK // HOLD: ADVANCE</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Passive Piezo Buzzer & Web Audio Synthesizer (Pin 3) -->
+                        <div class="hw-subsystem-box">
+                            <div class="hw-box-label">AUDIO // 5V PASSIVE PIEZO TRANSDUCER (PIN 3 PWM)</div>
+                            <div class="buzzer-telemetry-row">
+                                <div class="buzzer-speaker-grill" id="buzzerGrill">
+                                    <div class="grill-ring ring-1"></div>
+                                    <div class="grill-ring ring-2"></div>
+                                    <div class="grill-center"></div>
+                                </div>
+                                <div class="buzzer-info">
+                                    <div class="buzzer-harmonic" id="buzzerHarmonicText">SILENT // 0 HZ</div>
+                                    <div class="buzzer-status-sub">TONE() SYNTHESIZER [800-3800HZ]</div>
+                                </div>
+                                <button id="btnToggleAudioSynth" class="btn btn-sm" style="padding:0.35rem 0.6rem; font-size:0.65rem; font-weight:800;" onclick="toggleAudioSynthesizer()">
+                                    BEEPER: MUTE
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Hardware Baseline Pinout Map -->
+                        <div class="hw-plate-footer">
+                            <div style="color:var(--text-dim);">EEPROM: 7-DAY SCHEDULE MATRIX // AUTONOMOUS</div>
+                            <div style="color:var(--text-pure); font-weight:700;">ZLATANFC // SMART CAMPUS SDG 7 &amp; 9</div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </div> <!-- /.console-workspace-layout -->
+    </section>
 
             <!-- ===================================================================
                  SCREEN 02: 1-CLICK IIUM PERIOD MATRIX & SCOPE BROADCAST

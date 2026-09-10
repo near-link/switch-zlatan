@@ -128,20 +128,20 @@ document.addEventListener("DOMContentLoaded", () => {
 // =============================================================================
 function toggleSidebar() {
     const sb = document.querySelector(".sidebar");
-    const btn = document.getElementById("sidebarToggleBtn");
+    const app = document.querySelector(".app-container");
     if (!sb) return;
     const isCollapsed = sb.classList.toggle("collapsed");
-    if (btn) btn.textContent = isCollapsed ? "▶" : "◀";
+    if (app) app.classList.toggle("sidebar-collapsed", isCollapsed);
     localStorage.setItem("switch_sidebar_collapsed", isCollapsed ? "true" : "false");
 }
 
 function initSidebarState() {
     const saved = localStorage.getItem("switch_sidebar_collapsed");
-    if (saved === "true") {
+    if (saved === "true" && window.innerWidth > 820) {
         const sb = document.querySelector(".sidebar");
-        const btn = document.getElementById("sidebarToggleBtn");
+        const app = document.querySelector(".app-container");
         if (sb) sb.classList.add("collapsed");
-        if (btn) btn.textContent = "▶";
+        if (app) app.classList.add("sidebar-collapsed");
     }
 }
 

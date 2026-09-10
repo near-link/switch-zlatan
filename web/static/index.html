@@ -7,7 +7,10 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>SWITCH_ // IIUM Energy Conservation</title>
-    <link rel="stylesheet" href="/static/style.css?v=5.3">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=JetBrains+Mono:wght@400;600;700;800&family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=5.4">
 </head>
 <body>
     <!-- AUTHENTICATION OVERLAY GATE -->
@@ -29,68 +32,6 @@
     </script>
 
     <div class="app-container">
-        <!-- TACTICAL BLUEPRINT SIDEBAR -->
-        <aside class="sidebar">
-            <div>
-                <div class="brand-section">
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem;">
-                        <div class="brand-meta-group">
-                            <span class="brand-badge">ZLATANFC</span>
-                            <h1 class="brand-title"><span class="brand-full">SWITCH_</span><span class="brand-short" style="display:none;">S_</span></h1>
-                            <div class="brand-subtitle">IN-WALL ATMEGA328P // SDG 7 &amp; 9</div>
-                        </div>
-                        <button id="sidebarToggleBtn" class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Collapse/Expand Sidebar">◀</button>
-                    </div>
-                </div>
-
-                <!-- NAVIGATION MENU -->
-                <nav class="nav-menu">
-                    <a class="nav-item active" data-view="viewConsole" onclick="navigate('viewConsole')" title="Hardware Console">
-                        <span class="nav-num">[01]</span>
-                        <span class="nav-label-desktop">HARDWARE CONSOLE</span>
-                        <span class="nav-label-mobile">CONTROLS</span>
-                    </a>
-                    <a class="nav-item" data-view="viewTimetable" onclick="navigate('viewTimetable')" title="Timetable Matrix">
-                        <span class="nav-num">[02]</span>
-                        <span class="nav-label-desktop">TIMETABLE MATRIX</span>
-                        <span class="nav-label-mobile">SCHEDULE</span>
-                    </a>
-                    <a class="nav-item" data-view="viewAnalytics" onclick="navigate('viewAnalytics')" title="Energy & SDG 7">
-                        <span class="nav-num">[03]</span>
-                        <span class="nav-label-desktop">ENERGY &amp; SDG 7</span>
-                        <span class="nav-label-mobile">ECO IMPACT</span>
-                    </a>
-                    <a id="navItemDiagnostics" class="nav-item" data-view="viewDiagnostics" onclick="navigate('viewDiagnostics')" title="Diagnostics">
-                        <span class="nav-num">[04]</span>
-                        <span class="nav-label-desktop">DIAGNOSTICS</span>
-                        <span class="nav-label-mobile">DIAGNOSTICS</span>
-                    </a>
-                </nav>
-            </div>
-
-            <div class="sidebar-footer">
-                <div class="hw-tag">
-                    <span>HARDWARE:</span>
-                    <span id="sidebarHwLinkText" style="color:#888; font-weight:700;">VIRTUAL (24/7 ONLINE)</span>
-                </div>
-                <div class="hw-tag">
-                    <span>PORT:</span>
-                    <span style="color:var(--text-pure); font-weight:700;">/dev/ttyACM0</span>
-                </div>
-                <div class="hw-tag">
-                    <span>CHIP:</span>
-                    <span>ATMEGA328P @ 9600</span>
-                </div>
-                <div class="hw-tag" style="margin-bottom:0;">
-                    <span>GATEWAY:</span>
-                    <div class="hw-status-pill">
-                        <div id="sidebarHwDot" class="hw-dot"></div>
-                        <span id="sidebarHwText">ONLINE</span>
-                    </div>
-                </div>
-            </div>
-        </aside>
-
         <!-- MAIN VIEWPORT -->
         <main class="main-viewport">
             <!-- TOP CHROME BAR -->
@@ -98,6 +39,9 @@
                 <div class="topbar-title-group">
                     <h2 class="topbar-title" id="screenTitle">HARDWARE CONSOLE</h2>
                 </div>
+                <button class="topbar-menu-trigger" onclick="toggleSidebar()" title="Toggle Navigation">
+                    <span style="color:#ff3311;">▪</span> MENU
+                </button>
             </header>
 
             <!-- ===================================================================
@@ -644,6 +588,75 @@
                 </div>
             </section>
         </main>
+
+        <!-- INDUSTRIAL BRUTALIST SIDEBAR (DOCKED RIGHT ON DESKTOP, TOP ON MOBILE) -->
+        <aside class="sidebar">
+            <!-- MOBILE BRAND HEADER -->
+            <div class="brand-section">
+                <span class="brand-badge">ZLATANFC</span>
+                <h1 class="brand-title"><span class="brand-full">SWITCH_</span></h1>
+                <div class="brand-subtitle">IN-WALL ATMEGA328P // SDG 7 &amp; 9</div>
+            </div>
+
+            <!-- DESKTOP INDUSTRIAL HEADER -->
+            <div class="sidebar-header">
+                <div class="sidebar-header-title">
+                    <span class="sidebar-header-dot">▪</span>
+                    <span class="sidebar-header-text">MENU</span>
+                </div>
+                <button id="sidebarToggleBtn" class="sidebar-toggle-circle" onclick="toggleSidebar()" title="Close Navigation">
+                    <svg class="sidebar-close-svg" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" fill="none">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- NAVIGATION MENU -->
+            <nav class="nav-menu">
+                <a class="nav-item active" data-view="viewConsole" onclick="navigate('viewConsole')" title="Hardware Console">
+                    <span class="nav-label-desktop">CONSOLE</span>
+                    <span class="nav-label-mobile">CONTROLS</span>
+                    <span class="nav-active-dot">▪</span>
+                </a>
+                <a class="nav-item" data-view="viewTimetable" onclick="navigate('viewTimetable')" title="Timetable Matrix">
+                    <span class="nav-label-desktop">TIMETABLE</span>
+                    <span class="nav-label-mobile">SCHEDULE</span>
+                    <span class="nav-active-dot">▪</span>
+                </a>
+                <a class="nav-item" data-view="viewAnalytics" onclick="navigate('viewAnalytics')" title="Energy & SDG 7">
+                    <span class="nav-label-desktop">ANALYTICS</span>
+                    <span class="nav-label-mobile">ECO IMPACT</span>
+                    <span class="nav-active-dot">▪</span>
+                </a>
+                <a id="navItemDiagnostics" class="nav-item" data-view="viewDiagnostics" onclick="navigate('viewDiagnostics')" title="Diagnostics">
+                    <span class="nav-label-desktop">DIAGNOSTICS</span>
+                    <span class="nav-label-mobile">DIAGNOSTICS</span>
+                    <span class="nav-active-dot">▪</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="sidebar-footer-content">
+                    <div class="sidebar-meta-block">
+                        <div class="sidebar-meta-label">(EMAIL)</div>
+                        <a href="mailto:whois@imankh.me" class="sidebar-email-val">whois@imankh.me</a>
+                    </div>
+                    <div class="sidebar-meta-block">
+                        <div class="sidebar-meta-label">(LINKS)</div>
+                        <div class="sidebar-links-row">
+                            <a href="https://github.com/near-link/switch-zlatan" target="_blank" rel="noopener noreferrer" class="sidebar-repo-link">GitHub ↗</a>
+                        </div>
+                    </div>
+                    <div class="sidebar-telemetry-tag">
+                        <div id="sidebarHwDot" class="hw-dot"></div>
+                        <span id="sidebarHwText">ONLINE</span>
+                        <span style="color:#555;">//</span>
+                        <span id="sidebarHwLinkText">VIRTUAL</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
     </div>
 
     <!-- MODAL: IMPORT FROM I-MA'LUUM -->
@@ -709,6 +722,6 @@
 
     <div id="toastContainer"></div>
 
-    <script src="/static/app.js?v=5.3"></script>
+    <script src="/static/app.js?v=5.4"></script>
 </body>
 </html>

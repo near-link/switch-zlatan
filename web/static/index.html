@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>SWITCH_ // IIUM Energy Conservation</title>
-    <link rel="stylesheet" href="/static/style.css?v=5.2">
+    <link rel="stylesheet" href="/static/style.css?v=5.3">
 </head>
 <body>
     <!-- AUTHENTICATION OVERLAY GATE -->
@@ -310,43 +310,29 @@
                             </div>
                         </div>
 
-                        <div class="b-panel mobile-hide">
-                            <div class="b-panel-header">
-                                <span class="b-panel-title">SDG 7 Energy Automation Architecture</span>
+                        <!-- Compact Hardware Circuit Telemetry Grid -->
+                        <div class="telemetry-rack-compact">
+                            <div class="telemetry-card">
+                                <div class="telemetry-card-title">REAL-TIME CONNECTED LOAD</div>
+                                <div class="telemetry-card-val" id="metricLiveLoad">0 W</div>
+                                <div class="telemetry-card-sub" id="metricLiveLoadSub">STANDBY // ZERO WASTE</div>
                             </div>
-                            <div class="b-panel-body" style="font-size:0.72rem; color:var(--text-medium); line-height:1.6;">
-                                <p style="margin-bottom:0.5rem;">
-                                    Autonomous in-wall microcontroller executing an offline-first state machine. Microcode reads non-volatile internal EEPROM schedules independently of host connectivity.
-                                </p>
-                                <p>
-                                    Air conditioning pre-cools 10m in advance, lights energize at class start, and power is automatically cut once the room grace period elapses.
-                                </p>
+                            <div class="telemetry-card">
+                                <div class="telemetry-card-title">AC MAINS VOLTAGE</div>
+                                <div class="telemetry-card-val">240.0 V</div>
+                                <div class="telemetry-card-sub">50.0 HZ GRID STABILIZED</div>
+                            </div>
+                            <div class="telemetry-card">
+                                <div class="telemetry-card-title">CIRCUIT CURRENT DRAW</div>
+                                <div class="telemetry-card-val" id="metricLiveCurrent">0.02 A</div>
+                                <div class="telemetry-card-sub">SOLID-STATE SSR BUS</div>
+                            </div>
+                            <div class="telemetry-card">
+                                <div class="telemetry-card-title">ACOUSTIC INTEGRATION</div>
+                                <div class="telemetry-card-val">PIN 3 READY</div>
+                                <div class="telemetry-card-sub">MULTI-TIERED GRACE ALERTS</div>
                             </div>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Lower Telemetry Strip -->
-                <div class="telemetry-rack mobile-hide">
-                    <div class="telemetry-card">
-                        <div class="telemetry-card-title">REAL-TIME CONNECTED LOAD</div>
-                        <div class="telemetry-card-val" id="metricLiveLoad">0 W</div>
-                        <div class="telemetry-card-sub" id="metricLiveLoadSub">STANDBY // ZERO WASTE</div>
-                    </div>
-                    <div class="telemetry-card">
-                        <div class="telemetry-card-title">AC MAINS VOLTAGE</div>
-                        <div class="telemetry-card-val">240.0 V</div>
-                        <div class="telemetry-card-sub">50.0 HZ GRID STABILIZED</div>
-                    </div>
-                    <div class="telemetry-card">
-                        <div class="telemetry-card-title">CIRCUIT CURRENT DRAW</div>
-                        <div class="telemetry-card-val" id="metricLiveCurrent">0.02 A</div>
-                        <div class="telemetry-card-sub">SOLID-STATE SSR BUS</div>
-                    </div>
-                    <div class="telemetry-card">
-                        <div class="telemetry-card-title">ACOUSTIC INTEGRATION</div>
-                        <div class="telemetry-card-val">PIN 3 READY</div>
-                        <div class="telemetry-card-sub">MULTI-TIERED GRACE ALERTS</div>
                     </div>
                 </div>
 
@@ -723,6 +709,6 @@
 
     <div id="toastContainer"></div>
 
-    <script src="/static/app.js?v=5.2"></script>
+    <script src="/static/app.js?v=5.3"></script>
 </body>
 </html>

@@ -917,17 +917,38 @@ html, body {
   text-align: right;
 }
 
-/* Hardware Telemetry Strip (Lower Row) */
+/* Hardware Telemetry Matrix & Compact Rack */
 .telemetry-rack {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 1rem;
 }
 
+.telemetry-rack-compact {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.65rem;
+}
+
 .telemetry-card {
   background-color: var(--bg-panel);
   border: 1px solid var(--border-strong);
   padding: 0.9rem 1rem;
+  box-sizing: border-box;
+}
+
+.telemetry-rack-compact .telemetry-card {
+  padding: 0.65rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 68px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.telemetry-rack-compact .telemetry-card:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+  background-color: rgba(255, 255, 255, 0.02);
 }
 
 .telemetry-card-title {
@@ -939,6 +960,13 @@ html, body {
   margin-bottom: 0.4rem;
 }
 
+.telemetry-rack-compact .telemetry-card-title {
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.25rem;
+  line-height: 1.2;
+}
+
 .telemetry-card-val {
   font-size: 1.35rem;
   font-weight: 900;
@@ -946,10 +974,23 @@ html, body {
   letter-spacing: -0.01em;
 }
 
+.telemetry-rack-compact .telemetry-card-val {
+  font-size: 1.2rem;
+  line-height: 1.1;
+  font-family: var(--font-mono);
+}
+
 .telemetry-card-sub {
   font-size: 0.62rem;
   color: var(--text-medium);
   margin-top: 0.25rem;
+}
+
+.telemetry-rack-compact .telemetry-card-sub {
+  font-size: 0.56rem;
+  margin-top: 0.25rem;
+  line-height: 1.2;
+  font-family: var(--font-mono);
 }
 
 /* Pipeline Progress Visualizer */
@@ -2066,7 +2107,28 @@ html, body {
     box-sizing: border-box !important;
   }
 
-  /* Lower Telemetry Strip: Hidden on mobile as per user instruction */
+  /* Compact Hardware Telemetry Grid (Mobile) */
+  .telemetry-rack-compact {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 6px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .telemetry-rack-compact .telemetry-card {
+    padding: 0.5rem 0.6rem !important;
+    min-height: 58px !important;
+  }
+  .telemetry-rack-compact .telemetry-card-title {
+    font-size: 0.52rem !important;
+  }
+  .telemetry-rack-compact .telemetry-card-val {
+    font-size: 1.05rem !important;
+  }
+  .telemetry-rack-compact .telemetry-card-sub {
+    font-size: 0.5rem !important;
+  }
+
   .telemetry-rack {
     display: none !important;
   }

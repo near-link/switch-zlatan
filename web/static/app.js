@@ -802,6 +802,7 @@ async function deploySchedule() {
     } else {
         showToast(`DISPATCHING 7-DAY SCHEDULE TO EDGE SWITCH [${activeRoom}] VIA MQTT/TLS...`);
     }
+    playBuzzerTone(2400, 80); // Matches smart_switch.ino triggerBeep(2400, 80)
 
     try {
         const res = await fetch(`/api/deploy?room=${activeRoom}`, { method: "POST" });
@@ -827,6 +828,7 @@ async function deploySchedule() {
 }
 
 async function setSwitchDay(dayCode) {
+    playBuzzerTone(2800, 50); // Matches smart_switch.ino triggerBeep(2800, 50)
     try {
         const res = await fetch(`/api/hardware/day?day=${dayCode}`, { method: "POST" });
         if (res.ok) {
@@ -1005,22 +1007,61 @@ function applyTelemetry(data) {
         clockEl.textContent = advanceTimeOneSecond(data.time);
     }
 
-    // Relays
+    // Relays & Hardware LED Indicators
     const boxLights = document.getElementById("boxRelayLights");
     const boxAC = document.getElementById("boxRelayAC");
     const boxStandby = document.getElementById("boxRelayStandby");
+    const ledLights = document.getElementById("ledLights");
+    const ledAC = document.getElementById("ledAC");
+    const ledStandby = document.getElementById("ledStandby");
 
     if (boxLights) {
         boxLights.textContent = data.lights_on ? "ACTIVE" : "STANDBY";
         boxLights.classList.toggle("energized", data.lights_on);
+        boxLights.classList.toggle("energized-yellow", data.lights_on);
     }
+    if (ledLights) {
+        ledLights.classList.toggle("active", data.lights_on);
+    }
+
     if (boxAC) {
         boxAC.textContent = data.ac_on ? "ACTIVE" : "STANDBY";
         boxAC.classList.toggle("energized", data.ac_on);
+        boxAC.classList.toggle("energized-blue", data.ac_on);
     }
+    if (ledAC) {
+        ledAC.classList.toggle("active", data.ac_on);
+    }
+
     if (boxStandby) {
-        boxStandby.textContent = data.standby_on ? "ACTIVE" : "STANDBY";
-        boxStandby.classList.toggle("energized", data.standby_on);
+        const isGrace = (data.state === "GRACE");
+        const isForceOn = (data.override_mode === 1);
+        const isForceOff = (data.override_mode === 2);
+        const isBlinkingFast = isGrace || isForceOn;
+        const isBlinkingSlow = isForceOff;
+        const isStandbyActive = data.standby_on || isBlinkingFast || isBlinkingSlow;
+
+        boxStandby.classList.toggle("energized", isStandbyActive);
+        boxStandby.classList.toggle("energized-red", isStandbyActive);
+        boxStandby.classList.toggle("blinking-fast", isBlinkingFast);
+        boxStandby.classList.toggle("blinking-slow", isBlinkingSlow);
+
+        if (isBlinkingFast) {
+            boxStandby.textContent = "WARNING BLINK";
+        } else if (isBlinkingSlow) {
+            boxStandby.textContent = "HEARTBEAT";
+        } else {
+            boxStandby.textContent = data.standby_on ? "ACTIVE" : "STANDBY";
+        }
+    }
+    if (ledStandby) {
+        const isGrace = (data.state === "GRACE");
+        const isForceOn = (data.override_mode === 1);
+        const isForceOff = (data.override_mode === 2);
+        const isStandbyActive = data.standby_on || isGrace || isForceOn || isForceOff;
+        ledStandby.classList.toggle("active", isStandbyActive);
+        ledStandby.classList.toggle("blinking-fast", isGrace || isForceOn);
+        ledStandby.classList.toggle("blinking-slow", isForceOff);
     }
 
     // Top State Badge
@@ -1215,8 +1256,21 @@ function applyTelemetry(data) {
         p12.classList.toggle("active", data.ac_on);
     }
     if (p11) {
-        p11.textContent = data.standby_on ? "HIGH [STANDBY]" : "LOW";
-        p11.classList.toggle("active", data.standby_on);
+        const isGrace = (data.state === "GRACE");
+        const isForceOn = (data.override_mode === 1);
+        const isForceOff = (data.override_mode === 2);
+        const isStandbyActive = data.standby_on || isGrace || isForceOn || isForceOff;
+        p11.classList.toggle("active", isStandbyActive);
+        p11.classList.toggle("blinking-fast", isGrace || isForceOn);
+        p11.classList.toggle("blinking-slow", isForceOff);
+
+        if (isGrace || isForceOn) {
+            p11.textContent = "BLINK [WARN]";
+        } else if (isForceOff) {
+            p11.textContent = "HEARTBEAT [1HZ]";
+        } else {
+            p11.textContent = data.standby_on ? "HIGH [STANDBY]" : "LOW";
+        }
     }
     if (p10) {
         p10.textContent = data.manual_override ? "OVERRIDE" : "IDLE";
@@ -1255,7 +1309,12 @@ function applyTelemetry(data) {
 
     // Simulated Beeper trigger when untethered
     if (!data.hardware_linked && data.buzzer_active && data.buzzer_freq) {
-        playBuzzerTone(data.buzzer_freq, 80);
+        const bTs = (data.last_buzzer && data.last_buzzer.timestamp) ? data.last_buzzer.timestamp : 0;
+        if (bTs !== window.lastPlayedBuzzerTs) {
+            window.lastPlayedBuzzerTs = bTs;
+            const dur = (data.last_buzzer && data.last_buzzer.duration_ms) ? data.last_buzzer.duration_ms : 80;
+            playBuzzerTone(data.buzzer_freq, dur);
+        }
     }
 }
 
@@ -1286,7 +1345,7 @@ function setControlModeUI(mode) {
 
 async function setAutoMode() {
     setControlModeUI(0);
-    playBuzzerTone(2000, 60);
+    playBuzzerTone(2000, 50); // Matches smart_switch.ino triggerBeep(2000, 50)
     try {
         const res = await fetch("/api/override/auto", { method: "POST" });
         if (res.ok) {
@@ -1305,7 +1364,7 @@ async function setForceOn(minutes = null) {
         dur = foInput ? parseInt(foInput.value, 10) || 60 : 60;
     }
     setControlModeUI(1);
-    playBuzzerTone(2200, 80);
+    playBuzzerTone(2600, 60); // Matches smart_switch.ino triggerBeep(2600, 60)
     try {
         const res = await fetch("/api/override/force-on", {
             method: "POST",
@@ -1323,7 +1382,7 @@ async function setForceOn(minutes = null) {
 
 async function setForceOff() {
     setControlModeUI(2);
-    playBuzzerTone(1800, 80);
+    playBuzzerTone(1600, 60); // Matches smart_switch.ino triggerBeep(1600, 60)
     try {
         const res = await fetch("/api/override/force-off", { method: "POST" });
         if (res.ok) {
@@ -1337,7 +1396,7 @@ async function setForceOff() {
 
 async function setPresentationMode() {
     setControlModeUI(3);
-    playBuzzerTone(2600, 100);
+    playBuzzerTone(2700, 80); // Matches smart_switch.ino triggerBeep(2700, 80)
     try {
         const res = await fetch("/api/override/presentation", { method: "POST" });
         if (res.ok) {
@@ -1348,6 +1407,34 @@ async function setPresentationMode() {
         showToast("COMMAND ERROR");
     }
 }
+
+async function toggleRelayLightsUI() {
+    if (!lastTelemetry) return;
+    if (lastTelemetry.lights_on) {
+        // If lights are ON, switch to presentation mode (lights OFF, AC ON)
+        showToast("LIGHTS CUTOFF -> SWITCHING TO PRESENTATION MODE [AC ONLY]");
+        await setPresentationMode();
+    } else {
+        // If lights are OFF, energize utilities with Force ON
+        showToast("ENERGIZING LIGHTS -> ENGAGING FORCE ON [+60M]");
+        await setForceOn(60);
+    }
+}
+
+async function toggleRelayHVACUI() {
+    if (!lastTelemetry) return;
+    if (lastTelemetry.ac_on) {
+        // If HVAC is ON, force utilities OFF
+        showToast("HVAC CUTOFF -> ENGAGING FORCE OFF");
+        await setForceOff();
+    } else {
+        // If HVAC is OFF, engage presentation mode (AC ON)
+        showToast("ENERGIZING HVAC -> ENGAGING PRESENTATION MODE [AC ONLY]");
+        await setPresentationMode();
+    }
+}
+window.toggleRelayLightsUI = toggleRelayLightsUI;
+window.toggleRelayHVACUI = toggleRelayHVACUI;
 
 async function toggleManualOverride() {
     const btnAuto = document.getElementById("btnModeAuto") || document.getElementById("btnAutoMode");
@@ -1384,7 +1471,7 @@ async function testBuzzer(freq = 2200, duration = 120) {
 }
 
 async function setSpeed(factor) {
-    playBuzzerTone(2400, 50);
+    playBuzzerTone(2400, 25); // Matches smart_switch.ino triggerBeep(2400, 25)
     try {
         const res = await fetch("/api/speed", {
             method: "POST",
@@ -1398,6 +1485,26 @@ async function setSpeed(factor) {
 }
 
 async function setDemoTime(hour, minute, second = 0, day = "MON") {
+    // Authentic acoustic tone playback matching smart_switch.ino states
+    if (hour === 8 && minute <= 30) {
+        playBuzzerTone(1800, 80); // Pre-cooling engaged
+    } else if ((hour === 8 && minute > 30) || (hour >= 9 && hour < 11) || (hour === 11 && minute < 30)) {
+        playBuzzerTone(2400, 100); // Class session start chime
+    } else if (hour === 11 && minute >= 30 && minute < 40) {
+        const remSec = (40 - minute) * 60 - second;
+        if (remSec <= 10) {
+            playBuzzerTone(2800, 50); // Final 10s urgent emergency countdown
+        } else if (remSec <= 60) {
+            playBuzzerTone(2200, 45); // Final 1m warning pulse
+        } else {
+            playBuzzerTone(1600, 35); // General grace acoustic ping
+        }
+    } else if (hour === 23 && minute === 59) {
+        playBuzzerTone(1100, 75); // Night sweep curfew pulse
+    } else {
+        playBuzzerTone(800, 250); // Standby cutoff tone
+    }
+
     // Instant optimistic visual feedback on pipeline progress
     document.querySelectorAll(".pipeline-step").forEach(step => step.classList.remove("active"));
     if (hour === 8 && minute <= 30) {

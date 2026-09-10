@@ -262,6 +262,12 @@ class ArduinoSerialBridge:
         except Exception:
             pass
 
+        # Check day rollover past midnight
+        prev_sec = (self.sim_sec_counter - advance_sec) % 86400
+        if prev_sec > self.sim_sec_counter:
+            self.sim_day_idx = (self.sim_day_idx + 1) % 7
+            self.trigger_virtual_beep(3200, 80) # Midnight day rollover chime
+
         # Evaluate class state
         in_class = False
         in_precool = False
@@ -287,6 +293,7 @@ class ArduinoSerialBridge:
                 self.sim_override_remaining = max(0, self.sim_override_remaining - 1)
                 if self.sim_override_remaining == 0:
                     self.sim_override_mode = 0  # Revert to AUTO
+                    self.trigger_virtual_beep(800, 300) # Expiration mechanical cutoff tone
 
         # Determine Relays and System State
         yellow = False
@@ -298,12 +305,12 @@ class ArduinoSerialBridge:
             sys_state = "ACTIVE"
             yellow = True
             blue = True
-            red = False
+            red = (cur_second % 2 == 0) # Warning pulse blink on Red LED
         elif self.sim_override_mode == 2:
             sys_state = "FORCE_OFF"
             yellow = False
             blue = False
-            red = True
+            red = (cur_second % 2 == 0) # Heartbeat pulse on Red LED
         elif self.sim_override_mode == 3:
             sys_state = "PRESENTATION"
             yellow = False
@@ -323,17 +330,57 @@ class ArduinoSerialBridge:
             sys_state = "GRACE"
             yellow = True
             blue = True
-            red = (cur_second % 2 == 0)  # Blink standby LED at 1Hz during grace
-            # Simulated audio alert pulse during final 60s
-            if remaining_grace_sec <= 60 and cur_second % 5 == 0:
-                self.trigger_virtual_beep(2400, 70)
-            elif remaining_grace_sec <= 10:
-                self.trigger_virtual_beep(3200, 50)
+            red = (cur_second % 2 == 0)  # Warning pulse blink on Red LED
         else:
             sys_state = "STANDBY"
             yellow = False
             blue = False
             red = True
+
+        # State transition acoustic alerts (in AUTO mode)
+        if self.sim_override_mode == 0 and sys_state != self.sim_last_state:
+            if sys_state == "CLASS":
+                self.trigger_virtual_beep(2400, 100) # Class session start chime
+            elif sys_state == "PRECOOL":
+                self.trigger_virtual_beep(1800, 80)  # Pre-cooling engaged
+            elif sys_state == "GRACE":
+                self.trigger_virtual_beep(1400, 150) # Grace countdown initiated
+            elif sys_state == "STANDBY":
+                self.trigger_virtual_beep(800, 250)  # Power cutoff tone
+            self.sim_last_state = sys_state
+
+        # Grace Period Countdown Warning Beeps (matching smart_switch.ino)
+        if in_grace and self.sim_override_mode == 0:
+            if 0 < remaining_grace_sec <= 10:
+                self.trigger_virtual_beep(2800, 50) # Final 10s urgent 1Hz emergency countdown
+            elif 10 < remaining_grace_sec <= 60:
+                if cur_second % 5 == 0:
+                    self.trigger_virtual_beep(2200, 45) # Final 1m warning beep every 5s
+            elif remaining_grace_sec > 60:
+                if cur_second % 15 == 0:
+                    self.trigger_virtual_beep(1600, 35) # General grace acoustic ping every 15s
+
+        # Force ON Countdown Warning Beeps
+        if self.sim_override_mode == 1 and self.sim_override_remaining > 0:
+            rem_sec = self.sim_override_remaining * 60 - cur_second
+            if 0 < rem_sec <= 300:
+                if rem_sec % 60 == 0:
+                    self.trigger_virtual_beep(1500, 80) # 1 chirp per minute in final 5m
+                elif rem_sec <= 10 and rem_sec % 2 == 0:
+                    self.trigger_virtual_beep(2000, 40) # Urgent chirps every 2s in final 10s
+
+        # Night sweep curfew cutoff check
+        sweep_h = 0
+        sweep_m = 0
+        cur_sec_of_day = cur_hour * 3600 + cur_minute * 60 + cur_second
+        sweep_sec_of_day = sweep_h * 3600 + sweep_m * 60
+        sec_to_sweep = (sweep_sec_of_day - cur_sec_of_day + 86400) % 86400
+        if 0 < sec_to_sweep <= 10:
+            self.trigger_virtual_beep(1100, 75)
+        elif sec_to_sweep == 0 and cur_second == 0 and self.sim_override_mode != 0:
+            self.sim_override_mode = 0
+            self.sim_override_remaining = 0
+            self.trigger_virtual_beep(800, 300)
 
         day_str = DAY_CODES[self.sim_day_idx]
         override_flag = (self.sim_override_mode != 0)
@@ -418,15 +465,20 @@ class ArduinoSerialBridge:
             try:
                 asyncio.run_coroutine_threadsafe(self.hardware_ws.send_text(clean_cmd), self.hardware_loop)
                 logger.info(f"Forwarded Command to Laptop Bridge -> {clean_cmd}")
-                # Play confirmation tone on web client
+                # Play confirmation tone on web client matching firmware
                 if clean_cmd.startswith("FORCE_ON"):
-                    self.trigger_virtual_beep(2200, 80)
+                    self.trigger_virtual_beep(2600, 60)
                 elif clean_cmd == "FORCE_OFF":
-                    self.trigger_virtual_beep(1800, 80)
+                    self.trigger_virtual_beep(1600, 60)
                 elif clean_cmd == "PRESENTATION":
-                    self.trigger_virtual_beep(2600, 100)
+                    self.trigger_virtual_beep(2700, 80)
                 elif clean_cmd == "AUTO_MODE":
-                    self.trigger_virtual_beep(2000, 60)
+                    self.trigger_virtual_beep(2000, 50)
+                elif clean_cmd.startswith("BEEP"):
+                    parts = clean_cmd.split(":")
+                    f = int(parts[1]) if len(parts) > 1 else 2200
+                    d = int(parts[2]) if len(parts) > 2 else 100
+                    self.trigger_virtual_beep(f, d)
                 return True
             except Exception as e:
                 logger.error(f"Failed to forward command to laptop bridge: {e}")
@@ -448,45 +500,47 @@ class ArduinoSerialBridge:
             minutes = int(clean_cmd.split(":")[1]) if ":" in clean_cmd else 60
             self.sim_override_mode = 1
             self.sim_override_remaining = minutes
-            self.trigger_virtual_beep(2200, 80)
+            self.trigger_virtual_beep(2600, 60)
         elif clean_cmd == "FORCE_OFF":
             self.sim_override_mode = 2
             self.sim_override_remaining = 0
-            self.trigger_virtual_beep(1800, 80)
+            self.trigger_virtual_beep(1600, 60)
         elif clean_cmd == "PRESENTATION":
             self.sim_override_mode = 3
             self.sim_override_remaining = 120
-            self.trigger_virtual_beep(2600, 100)
+            self.trigger_virtual_beep(2700, 80)
         elif clean_cmd == "AUTO_MODE":
             self.sim_override_mode = 0
             self.sim_override_remaining = 0
-            self.trigger_virtual_beep(2000, 60)
+            self.trigger_virtual_beep(2000, 50)
         elif clean_cmd == "MANUAL_TOGGLE":
             if self.sim_override_mode != 0:
                 self.sim_override_mode = 0
                 self.sim_override_remaining = 0
-                self.trigger_virtual_beep(1800, 80)
+                self.trigger_virtual_beep(2000, 50)
             else:
                 self.sim_override_mode = 1
                 self.sim_override_remaining = 60
-                self.trigger_virtual_beep(2200, 80)
+                self.trigger_virtual_beep(2600, 60)
         elif clean_cmd.startswith("SET_SPEED:"):
             try:
                 factor = int(clean_cmd.split(":")[1])
                 self.sim_speed = factor
-                self.trigger_virtual_beep(2400, 50)
+                self.trigger_virtual_beep(2400, 25)
             except Exception:
                 pass
         elif clean_cmd.startswith("SET_DAY:"):
-            day_str = clean_cmd.split(":")[1].strip().upper()
-            if day_str in DAY_CODES:
-                self.sim_day_idx = DAY_CODES.index(day_str)
-                self.trigger_virtual_beep(2500, 70)
+            d_str = clean_cmd.split(":")[1].strip().upper()
+            if d_str in DAY_CODES:
+                self.sim_day_idx = DAY_CODES.index(d_str)
+                self.trigger_virtual_beep(2800, 50)
+        elif clean_cmd.startswith("SET_SCHED:") or clean_cmd.startswith("SET_POLICY:"):
+            self.trigger_virtual_beep(2400, 80)
         elif clean_cmd.startswith("BEEP:"):
             parts = clean_cmd.split(":")
-            freq = int(parts[1]) if len(parts) > 1 else 2200
-            dur = int(parts[2]) if len(parts) > 2 else 80
-            self.trigger_virtual_beep(freq, dur)
+            f = int(parts[1]) if len(parts) > 1 else 2200
+            d = int(parts[2]) if len(parts) > 2 else 100
+            self.trigger_virtual_beep(f, d)
         elif clean_cmd == "PING":
             with self.lock:
                 self.state["last_ack"] = "PONG:OK"

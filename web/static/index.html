@@ -152,20 +152,29 @@
 
                             <!-- 3 Relay Channels -->
                             <div class="relay-rack">
-                                <div class="relay-channel">
-                                    <div class="channel-label">RELAY 01 // LIGHTS</div>
+                                <div class="relay-channel" onclick="toggleRelayLightsUI()" title="Toggle Lights Channel (Pin 13 Yellow LED)">
+                                    <div class="channel-label" style="display:flex; justify-content:space-between; align-items:center;">
+                                        <span>RELAY 01 // LIGHTS</span>
+                                        <span id="ledLights" class="led-indicator led-yellow"></span>
+                                    </div>
                                     <div id="boxRelayLights" class="channel-state-box">STANDBY</div>
-                                    <div class="channel-pin-desc">PIN 13 // SOLID STATE</div>
+                                    <div class="channel-pin-desc">PIN 13 // YELLOW LED (480W)</div>
                                 </div>
-                                <div class="relay-channel">
-                                    <div class="channel-label">RELAY 02 // HVAC</div>
+                                <div class="relay-channel" onclick="toggleRelayHVACUI()" title="Toggle HVAC Channel (Pin 12 Blue LED)">
+                                    <div class="channel-label" style="display:flex; justify-content:space-between; align-items:center;">
+                                        <span>RELAY 02 // HVAC</span>
+                                        <span id="ledAC" class="led-indicator led-blue"></span>
+                                    </div>
                                     <div id="boxRelayAC" class="channel-state-box">STANDBY</div>
-                                    <div class="channel-pin-desc">PIN 12 // HIGH INDUCTIVE</div>
+                                    <div class="channel-pin-desc">PIN 12 // BLUE LED (2200W)</div>
                                 </div>
-                                <div class="relay-channel">
-                                    <div class="channel-label">RELAY 03 // ALERT</div>
+                                <div class="relay-channel" onclick="toggleManualOverride()" title="Toggle In-Wall Switch Override (Pin 11 Red LED)">
+                                    <div class="channel-label" style="display:flex; justify-content:space-between; align-items:center;">
+                                        <span>RELAY 03 // INDICATOR</span>
+                                        <span id="ledStandby" class="led-indicator led-red active"></span>
+                                    </div>
                                     <div id="boxRelayStandby" class="channel-state-box energized">STANDBY</div>
-                                    <div class="channel-pin-desc">PIN 11 // SYSTEM ACTIVE</div>
+                                    <div class="channel-pin-desc">PIN 11 // RED LED (STATUS)</div>
                                 </div>
                             </div>
 

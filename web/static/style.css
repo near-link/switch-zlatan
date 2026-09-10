@@ -549,6 +549,69 @@ html, body {
   margin-bottom: 0.5rem;
 }
 
+/* LED Indicators for Hardware Channels */
+.led-indicator {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #1a1a1a;
+  border: 1px solid #333333;
+  transition: all 0.15s ease-in-out;
+}
+
+.led-indicator.led-yellow.active {
+  background-color: #ffcc00;
+  border-color: #ffe600;
+  box-shadow: 0 0 8px #ffcc00, 0 0 14px rgba(255, 204, 0, 0.7);
+}
+
+.led-indicator.led-blue.active {
+  background-color: #0088ff;
+  border-color: #33aaff;
+  box-shadow: 0 0 8px #0088ff, 0 0 14px rgba(0, 136, 255, 0.7);
+}
+
+.led-indicator.led-red.active {
+  background-color: #ff3333;
+  border-color: #ff5555;
+  box-shadow: 0 0 8px #ff3333, 0 0 14px rgba(255, 51, 51, 0.7);
+}
+
+.led-indicator.led-red.blinking-fast {
+  animation: led-red-warning 0.5s infinite;
+}
+
+.led-indicator.led-red.blinking-slow {
+  animation: led-red-heartbeat 2s infinite;
+}
+
+@keyframes led-red-warning {
+  0%, 49% {
+    background-color: #ff3333;
+    border-color: #ff5555;
+    box-shadow: 0 0 8px #ff3333, 0 0 14px rgba(255, 51, 51, 0.8);
+  }
+  50%, 100% {
+    background-color: #1a0505;
+    border-color: #441111;
+    box-shadow: none;
+  }
+}
+
+@keyframes led-red-heartbeat {
+  0%, 49% {
+    background-color: #cc2222;
+    border-color: #ff4444;
+    box-shadow: 0 0 8px #cc2222, 0 0 12px rgba(204, 34, 34, 0.6);
+  }
+  50%, 100% {
+    background-color: #110404;
+    border-color: #331111;
+    box-shadow: none;
+  }
+}
+
 .channel-state-box {
   padding: 0.45rem;
   font-size: 0.72rem;
@@ -558,12 +621,88 @@ html, body {
   background-color: #0e0e0e;
   border: 1px solid var(--border-dim);
   color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.08s ease, filter 0.1s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.channel-state-box:active {
+  transform: scale(0.97);
 }
 
 .channel-state-box.energized {
   background-color: var(--text-pure);
   color: var(--text-inverted);
   border-color: var(--text-pure);
+}
+
+/* Lights Channel Active: Yellow / Pin 13 */
+#boxRelayLights.energized,
+.channel-state-box.energized-yellow {
+  background-color: #ffcc00 !important;
+  color: #000000 !important;
+  border-color: #ffcc00 !important;
+  font-weight: 900 !important;
+  box-shadow: 0 0 16px rgba(255, 204, 0, 0.45);
+}
+
+/* HVAC Channel Active: Blue / Pin 12 */
+#boxRelayAC.energized,
+.channel-state-box.energized-blue {
+  background-color: #0088ff !important;
+  color: #ffffff !important;
+  border-color: #0088ff !important;
+  font-weight: 900 !important;
+  box-shadow: 0 0 16px rgba(0, 136, 255, 0.45);
+}
+
+/* Indicator / Standby Channel Active: Red / Pin 11 */
+#boxRelayStandby.energized,
+.channel-state-box.energized-red {
+  background-color: #ff3333 !important;
+  color: #ffffff !important;
+  border-color: #ff3333 !important;
+  font-weight: 900 !important;
+  box-shadow: 0 0 16px rgba(255, 51, 51, 0.45);
+}
+
+/* Authentic Red LED Blinking Behaviors */
+@keyframes red-box-warning {
+  0%, 49% {
+    background-color: #ff3333 !important;
+    border-color: #ff3333 !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 18px rgba(255, 51, 51, 0.7);
+  }
+  50%, 100% {
+    background-color: #1a0505 !important;
+    border-color: #441111 !important;
+    color: #ff6666 !important;
+    box-shadow: none !important;
+  }
+}
+
+@keyframes red-box-heartbeat {
+  0%, 49% {
+    background-color: #cc2222 !important;
+    border-color: #cc2222 !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 14px rgba(204, 34, 34, 0.5);
+  }
+  50%, 100% {
+    background-color: #110404 !important;
+    border-color: #331111 !important;
+    color: #772222 !important;
+    box-shadow: none !important;
+  }
+}
+
+#boxRelayStandby.blinking-fast {
+  animation: red-box-warning 0.5s infinite;
+}
+
+#boxRelayStandby.blinking-slow {
+  animation: red-box-heartbeat 2s infinite;
 }
 
 .channel-pin-desc {
@@ -1226,11 +1365,42 @@ html, body {
   font-weight: 700;
   background-color: #1a1a1a;
   color: #aaa;
+  border: 1px solid #2a2a2a;
+  transition: all 0.12s ease-in-out;
 }
 
 .pin-badge.active {
   background-color: var(--text-pure);
   color: var(--text-inverted);
+}
+
+#pin13Badge.active {
+  background-color: #ffcc00 !important;
+  color: #000000 !important;
+  border-color: #ffcc00 !important;
+  box-shadow: 0 0 8px rgba(255, 204, 0, 0.5);
+}
+
+#pin12Badge.active {
+  background-color: #0088ff !important;
+  color: #ffffff !important;
+  border-color: #0088ff !important;
+  box-shadow: 0 0 8px rgba(0, 136, 255, 0.5);
+}
+
+#pin11Badge.active {
+  background-color: #ff3333 !important;
+  color: #ffffff !important;
+  border-color: #ff3333 !important;
+  box-shadow: 0 0 8px rgba(255, 51, 51, 0.5);
+}
+
+#pin11Badge.blinking-fast {
+  animation: red-box-warning 0.5s infinite !important;
+}
+
+#pin11Badge.blinking-slow {
+  animation: red-box-heartbeat 2s infinite !important;
 }
 
 /* ==========================================================================

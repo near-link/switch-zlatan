@@ -10,13 +10,16 @@ import hmac
 import asyncio
 import logging
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from pydantic import BaseModel, Field
+
+MALAYSIA_TZ = timezone(timedelta(hours=8))
+DAY_CODES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
 
 from web.database import (
     init_db, log_event, get_classes, add_class_session, delete_class_session,
@@ -168,6 +171,12 @@ class ClockSetModel(BaseModel):
     second: int = Field(default=0, ge=0, le=59)
     day: Optional[str] = Field(default=None, description="Optional target day code e.g. MON, TUE, WED")
 
+class ClockSyncPayload(BaseModel):
+    hour: Optional[int] = Field(default=None, ge=0, le=23)
+    minute: Optional[int] = Field(default=None, ge=0, le=59)
+    second: Optional[int] = Field(default=None, ge=0, le=59)
+    day: Optional[str] = Field(default=None, description="Day code e.g. MON, TUE, WED")
+
 class ForceOnModel(BaseModel):
     minutes: int = Field(default=60, ge=1, le=480)
 
@@ -196,7 +205,7 @@ async def get_status(room: str = "E1-2-14"):
         "policy": policy,
         "deployable": deployable,
         "room": room,
-        "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "server_time": datetime.now(MALAYSIA_TZ).strftime("%Y-%m-%d %H:%M:%S")
     }
 
 @app.get("/api/classes")
@@ -334,12 +343,27 @@ async def set_hardware_day_endpoint(day: str = Query(..., description="Day code 
     raise HTTPException(status_code=503, detail="Serial connection unavailable.")
 
 @app.post("/api/clock/sync")
-async def sync_clock_endpoint():
-    now = datetime.now()
-    success = bridge.sync_time(now.hour, now.minute, now.second)
+async def sync_clock_endpoint(payload: Optional[ClockSyncPayload] = None):
+    if payload and payload.hour is not None and payload.minute is not None:
+        h = payload.hour
+        m = payload.minute
+        s = payload.second if payload.second is not None else 0
+        target_day = payload.day.strip().upper() if payload.day else None
+    else:
+        now_my = datetime.now(MALAYSIA_TZ)
+        h = now_my.hour
+        m = now_my.minute
+        s = now_my.second
+        target_day = DAY_CODES[now_my.weekday()]
+
+    if target_day and target_day in DAY_CODES:
+        bridge.set_switch_day(target_day)
+
+    success = bridge.sync_time(h, m, s, day=target_day)
+    time_str = f"{h:02d}:{m:02d}:{s:02d}"
     if success:
-        log_event("CLOCK_SYNC", f"Clock synced with server: {now.strftime('%H:%M:%S')}")
-        return {"status": "success", "synced_time": now.strftime("%H:%M:%S")}
+        log_event("CLOCK_SYNC", f"Clock synced with host: {time_str}" + (f" ({target_day})" if target_day else ""))
+        return {"status": "success", "synced_time": time_str, "day": target_day}
     raise HTTPException(status_code=503, detail="Serial connection unavailable.")
 
 @app.post("/api/clock/set")

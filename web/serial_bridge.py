@@ -54,6 +54,12 @@ class ArduinoSerialBridge:
         self.sim_sec_counter = None      # Total seconds since midnight (0..86399)
         self.sim_last_tick = time.time()
         self.sim_last_state = "STANDBY"
+        self.sim_last_scheduled_state = "STANDBY"
+        self.sim_force_off_until_min = 0
+        self.sim_force_on_until_min = 0
+        self.sim_presentation_until_min = 0
+        self.sim_splash_text: Optional[str] = None
+        self.sim_splash_until = 0.0
 
         # Telemetry State Cache
         self.state: Dict[str, Any] = {
@@ -70,6 +76,7 @@ class ArduinoSerialBridge:
             "timer_remaining_min": 0,
             "speed_factor": 1,
             "day": DAY_CODES[self.sim_day_idx],
+            "display_splash": None,
             "buzzer_active": False,
             "buzzer_freq": 0,
             "last_buzzer": None,
@@ -183,6 +190,24 @@ class ArduinoSerialBridge:
 
         threading.Thread(target=_reset_beep, daemon=True).start()
 
+    def _set_splash(self, text: str, duration_sec: float = 1.5):
+        """Sets temporary 4-digit 7-segment display splash message (e.g. AUto, F-On, F-OF, PrES, dAY1)."""
+        with self.lock:
+            self.sim_splash_text = text
+            self.sim_splash_until = time.time() + duration_sec
+            self.state["display_splash"] = text
+        self._broadcast_state()
+
+        def _clear_splash():
+            time.sleep(duration_sec)
+            with self.lock:
+                if self.sim_splash_text == text and time.time() >= self.sim_splash_until:
+                    self.sim_splash_text = None
+                    self.state["display_splash"] = None
+            self._broadcast_state()
+
+        threading.Thread(target=_clear_splash, daemon=True).start()
+
     def _worker_loop(self):
         """Main background loop handling physical serial or virtual simulation ticks."""
         while self.running:
@@ -224,13 +249,13 @@ class ArduinoSerialBridge:
             self._run_virtual_tick()
             time.sleep(0.2)
 
-    def _run_virtual_tick(self):
+    def _run_virtual_tick(self, force: bool = False):
         """Advances virtual simulation clock and updates state machine based on timetable."""
         now = time.time()
         elapsed = now - self.sim_last_tick
         interval = 1.0 / max(1, self.sim_speed)
 
-        if elapsed < interval:
+        if not force and elapsed < interval:
             return
 
         self.sim_last_tick = now
@@ -241,14 +266,23 @@ class ArduinoSerialBridge:
             self.sim_sec_counter = now_my.hour * 3600 + now_my.minute * 60 + now_my.second
             self.sim_day_idx = now_my.weekday()
 
-        # Advance virtual clock by 1 second (or more if lagged)
-        advance_sec = max(1, int(elapsed / interval))
-        self.sim_sec_counter = (self.sim_sec_counter + advance_sec) % 86400
+        if not force:
+            advance_sec = max(1, int(elapsed / interval))
+            self.sim_sec_counter = (self.sim_sec_counter + advance_sec) % 86400
+        else:
+            advance_sec = 0
+
         cur_hour = self.sim_sec_counter // 3600
         cur_minute = (self.sim_sec_counter % 3600) // 60
         cur_second = self.sim_sec_counter % 60
         cur_time_str = f"{cur_hour:02d}:{cur_minute:02d}:{cur_second:02d}"
         cur_total_min = cur_hour * 60 + cur_minute
+
+        # Check splash expiration
+        if self.sim_splash_text and now >= self.sim_splash_until:
+            self.sim_splash_text = None
+            with self.lock:
+                self.state["display_splash"] = None
 
         # Query class schedule for current room and day
         from web.database import get_classes, get_policy
@@ -263,10 +297,17 @@ class ArduinoSerialBridge:
             pass
 
         # Check day rollover past midnight
-        prev_sec = (self.sim_sec_counter - advance_sec) % 86400
-        if prev_sec > self.sim_sec_counter:
-            self.sim_day_idx = (self.sim_day_idx + 1) % 7
-            self.trigger_virtual_beep(3200, 80) # Midnight day rollover chime
+        if not force and advance_sec > 0:
+            prev_sec = (self.sim_sec_counter - advance_sec) % 86400
+            if prev_sec > self.sim_sec_counter:
+                self.sim_day_idx = (self.sim_day_idx + 1) % 7
+                self.sim_override_mode = 0
+                self.sim_override_remaining = 0
+                self.sim_force_off_until_min = 0
+                self.sim_force_on_until_min = 0
+                self.sim_presentation_until_min = 0
+                self._set_splash(f"dAY{self.sim_day_idx + 1}", 1.5)
+                self.trigger_virtual_beep(3200, 80) # Midnight day rollover chime
 
         # Evaluate class state
         in_class = False
@@ -287,12 +328,55 @@ class ArduinoSerialBridge:
                 in_grace = True
                 remaining_grace_sec = (e_min + grace_min - cur_total_min) * 60 - cur_second
 
+        if in_class:
+            new_sched_state = "CLASS"
+        elif in_precool:
+            new_sched_state = "PRECOOL"
+        elif in_grace:
+            new_sched_state = "GRACE"
+        else:
+            new_sched_state = "STANDBY"
+
+        # Check Schedule Boundary Transitions for Auto-Resynchronization (matching smart_switch.ino)
+        if self.sim_override_mode == 2:  # FORCE_OFF (early dismissal)
+            if (self.sim_force_off_until_min > 0 and cur_total_min >= self.sim_force_off_until_min) or \
+               (self.sim_last_scheduled_state != "STANDBY" and new_sched_state == "STANDBY"):
+                self.sim_override_mode = 0
+                self.sim_force_off_until_min = 0
+                self.sim_override_remaining = 0
+                self._set_splash("AUto", 1.5)
+                self.trigger_virtual_beep(2000, 50)
+        elif self.sim_override_mode == 3:  # PRESENTATION
+            if (self.sim_presentation_until_min > 0 and cur_total_min >= self.sim_presentation_until_min) or \
+               (self.sim_last_scheduled_state == "CLASS" and new_sched_state in ("GRACE", "STANDBY")):
+                self.sim_override_mode = 0
+                self.sim_presentation_until_min = 0
+                self.sim_override_remaining = 0
+                self._set_splash("AUto", 1.5)
+                self.trigger_virtual_beep(2000, 50)
+        elif self.sim_override_mode == 1:  # FORCE_ON
+            if new_sched_state in ("PRECOOL", "CLASS"):
+                self.sim_override_mode = 0
+                self.sim_force_on_until_min = 0
+                self.sim_override_remaining = 0
+                self._set_splash("AUto", 1.5)
+                self.trigger_virtual_beep(2400, 80)
+            elif self.sim_force_on_until_min > 0 and cur_total_min >= self.sim_force_on_until_min:
+                self.sim_override_mode = 0
+                self.sim_force_on_until_min = 0
+                self.sim_override_remaining = 0
+                self._set_splash("AUto", 1.5)
+                self.trigger_virtual_beep(800, 300)
+
+        self.sim_last_scheduled_state = new_sched_state
+
         # Override Countdown decrements
-        if self.sim_override_mode != 0 and self.sim_override_remaining > 0:
-            if cur_second == 0:
+        if self.sim_override_mode == 1 and self.sim_override_remaining > 0:
+            if cur_second == 0 and not force:
                 self.sim_override_remaining = max(0, self.sim_override_remaining - 1)
                 if self.sim_override_remaining == 0:
                     self.sim_override_mode = 0  # Revert to AUTO
+                    self._set_splash("AUto", 1.5)
                     self.trigger_virtual_beep(800, 300) # Expiration mechanical cutoff tone
 
         # Determine Relays and System State
@@ -350,7 +434,7 @@ class ArduinoSerialBridge:
             self.sim_last_state = sys_state
 
         # Grace Period Countdown Warning Beeps (matching smart_switch.ino)
-        if in_grace and self.sim_override_mode == 0:
+        if in_grace and self.sim_override_mode == 0 and not force:
             if 0 < remaining_grace_sec <= 10:
                 self.trigger_virtual_beep(2800, 50) # Final 10s urgent 1Hz emergency countdown
             elif 10 < remaining_grace_sec <= 60:
@@ -361,7 +445,7 @@ class ArduinoSerialBridge:
                     self.trigger_virtual_beep(1600, 35) # General grace acoustic ping every 15s
 
         # Force ON Countdown Warning Beeps
-        if self.sim_override_mode == 1 and self.sim_override_remaining > 0:
+        if self.sim_override_mode == 1 and self.sim_override_remaining > 0 and not force:
             rem_sec = self.sim_override_remaining * 60 - cur_second
             if 0 < rem_sec <= 300:
                 if rem_sec % 60 == 0:
@@ -375,11 +459,12 @@ class ArduinoSerialBridge:
         cur_sec_of_day = cur_hour * 3600 + cur_minute * 60 + cur_second
         sweep_sec_of_day = sweep_h * 3600 + sweep_m * 60
         sec_to_sweep = (sweep_sec_of_day - cur_sec_of_day + 86400) % 86400
-        if 0 < sec_to_sweep <= 10:
+        if 0 < sec_to_sweep <= 10 and not force:
             self.trigger_virtual_beep(1100, 75)
-        elif sec_to_sweep == 0 and cur_second == 0 and self.sim_override_mode != 0:
+        elif sec_to_sweep == 0 and cur_second == 0 and self.sim_override_mode != 0 and not force:
             self.sim_override_mode = 0
             self.sim_override_remaining = 0
+            self._set_splash("AUto", 1.5)
             self.trigger_virtual_beep(800, 300)
 
         day_str = DAY_CODES[self.sim_day_idx]
@@ -467,13 +552,22 @@ class ArduinoSerialBridge:
                 logger.info(f"Forwarded Command to Laptop Bridge -> {clean_cmd}")
                 # Play confirmation tone on web client matching firmware
                 if clean_cmd.startswith("FORCE_ON"):
+                    self._set_splash("F-On", 1.5)
                     self.trigger_virtual_beep(2600, 60)
                 elif clean_cmd == "FORCE_OFF":
+                    self._set_splash("F-OF", 1.5)
                     self.trigger_virtual_beep(1600, 60)
                 elif clean_cmd == "PRESENTATION":
+                    self._set_splash("PrES", 1.5)
                     self.trigger_virtual_beep(2700, 80)
                 elif clean_cmd == "AUTO_MODE":
+                    self._set_splash("AUto", 1.5)
                     self.trigger_virtual_beep(2000, 50)
+                elif clean_cmd.startswith("SET_DAY:"):
+                    d_str = clean_cmd.split(":")[1].strip().upper()
+                    if d_str in DAY_CODES:
+                        self._set_splash(f"dAY{DAY_CODES.index(d_str) + 1}", 1.5)
+                    self.trigger_virtual_beep(2800, 50)
                 elif clean_cmd.startswith("BEEP"):
                     parts = clean_cmd.split(":")
                     f = int(parts[1]) if len(parts) > 1 else 2200
@@ -496,32 +590,87 @@ class ArduinoSerialBridge:
 
         # 3. Virtual Engine Command Processing (when physical hardware is absent)
         logger.info(f"Virtual Engine Executed -> {clean_cmd}")
+        cur_sec = self.sim_sec_counter if self.sim_sec_counter is not None else 0
+        cur_total_min = cur_sec // 60
+
+        from web.database import get_classes, get_policy
+        policy = get_policy()
+        grace_min = policy.get("grace_minutes", 10)
+        precool_min = policy.get("precool_minutes", 10)
+        classes = []
+        try:
+            classes = get_classes(room="E1-2-14", day_of_week=self.sim_day_idx)
+        except Exception:
+            pass
+
+        target_session_end = cur_total_min + 60
+        for c in classes:
+            s_min = c["start_hour"] * 60 + c["start_minute"]
+            e_min = c["end_hour"] * 60 + c["end_minute"]
+            if (s_min - precool_min) <= cur_total_min < (e_min + grace_min):
+                target_session_end = e_min + grace_min
+                break
+
         if clean_cmd.startswith("FORCE_ON"):
             minutes = int(clean_cmd.split(":")[1]) if ":" in clean_cmd else 60
             self.sim_override_mode = 1
             self.sim_override_remaining = minutes
+            self.sim_force_on_until_min = cur_total_min + minutes
+            self.sim_force_off_until_min = 0
+            self.sim_presentation_until_min = 0
+            self._set_splash("F-On", 1.5)
             self.trigger_virtual_beep(2600, 60)
+            self._run_virtual_tick(force=True)
         elif clean_cmd == "FORCE_OFF":
             self.sim_override_mode = 2
             self.sim_override_remaining = 0
+            self.sim_force_off_until_min = target_session_end
+            self.sim_force_on_until_min = 0
+            self.sim_presentation_until_min = 0
+            self._set_splash("F-OF", 1.5)
             self.trigger_virtual_beep(1600, 60)
+            self._run_virtual_tick(force=True)
         elif clean_cmd == "PRESENTATION":
             self.sim_override_mode = 3
-            self.sim_override_remaining = 120
+            self.sim_presentation_until_min = target_session_end
+            self.sim_override_remaining = max(1, target_session_end - cur_total_min)
+            self.sim_force_off_until_min = 0
+            self.sim_force_on_until_min = 0
+            self._set_splash("PrES", 1.5)
             self.trigger_virtual_beep(2700, 80)
+            self._run_virtual_tick(force=True)
         elif clean_cmd == "AUTO_MODE":
             self.sim_override_mode = 0
             self.sim_override_remaining = 0
+            self.sim_force_off_until_min = 0
+            self.sim_force_on_until_min = 0
+            self.sim_presentation_until_min = 0
+            self._set_splash("AUto", 1.5)
             self.trigger_virtual_beep(2000, 50)
+            self._run_virtual_tick(force=True)
         elif clean_cmd == "MANUAL_TOGGLE":
             if self.sim_override_mode != 0:
                 self.sim_override_mode = 0
                 self.sim_override_remaining = 0
+                self.sim_force_off_until_min = 0
+                self.sim_force_on_until_min = 0
+                self.sim_presentation_until_min = 0
+                self._set_splash("AUto", 1.5)
                 self.trigger_virtual_beep(2000, 50)
             else:
-                self.sim_override_mode = 1
-                self.sim_override_remaining = 60
-                self.trigger_virtual_beep(2600, 60)
+                if self.sim_last_scheduled_state in ("CLASS", "PRECOOL", "GRACE"):
+                    self.sim_override_mode = 2
+                    self.sim_override_remaining = 0
+                    self.sim_force_off_until_min = target_session_end
+                    self._set_splash("F-OF", 1.5)
+                    self.trigger_virtual_beep(1600, 60)
+                else:
+                    self.sim_override_mode = 1
+                    self.sim_override_remaining = 60
+                    self.sim_force_on_until_min = cur_total_min + 60
+                    self._set_splash("F-On", 1.5)
+                    self.trigger_virtual_beep(2600, 60)
+            self._run_virtual_tick(force=True)
         elif clean_cmd.startswith("SET_SPEED:"):
             try:
                 factor = int(clean_cmd.split(":")[1])
@@ -532,10 +681,16 @@ class ArduinoSerialBridge:
         elif clean_cmd.startswith("SET_DAY:"):
             d_str = clean_cmd.split(":")[1].strip().upper()
             if d_str in DAY_CODES:
-                self.sim_day_idx = DAY_CODES.index(d_str)
+                idx = DAY_CODES.index(d_str)
+                self.sim_day_idx = idx
+                with self.lock:
+                    self.state["day"] = d_str
+                self._set_splash(f"dAY{idx + 1}", 1.5)
                 self.trigger_virtual_beep(2800, 50)
+                self._run_virtual_tick(force=True)
         elif clean_cmd.startswith("SET_SCHED:") or clean_cmd.startswith("SET_POLICY:"):
             self.trigger_virtual_beep(2400, 80)
+            self._run_virtual_tick(force=True)
         elif clean_cmd.startswith("BEEP:"):
             parts = clean_cmd.split(":")
             f = int(parts[1]) if len(parts) > 1 else 2200
@@ -547,11 +702,18 @@ class ArduinoSerialBridge:
 
         return True
 
-    def sync_time(self, hour: int, minute: int, second: int) -> bool:
+    def sync_time(self, hour: int, minute: int, second: int, day: Optional[str] = None) -> bool:
         cmd = f"SYNC:{hour:02d}:{minute:02d}:{second:02d}"
-        if not self.hardware_linked:
+        with self.lock:
             self.sim_sec_counter = hour * 3600 + minute * 60 + second
-        return self.send_command(cmd)
+            self.sim_last_tick = time.time()
+            if day and day in DAY_CODES:
+                self.sim_day_idx = DAY_CODES.index(day)
+                self.state["day"] = day
+            self.state["time"] = f"{hour:02d}:{minute:02d}:{second:02d}"
+        res = self.send_command(cmd)
+        self._run_virtual_tick(force=True)
+        return res
 
     def set_schedule(self, sH1: int, sM1: int, eH1: int, eM1: int,
                       sH2: int, sM2: int, eH2: int, eM2: int,

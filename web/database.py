@@ -6,8 +6,10 @@ Stores campus room hierarchies, weekly academic schedules, energy policies, and 
 
 import sqlite3
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
+
+MALAYSIA_TZ = timezone(timedelta(hours=8))
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "timetable.db")
 
@@ -524,7 +526,7 @@ def get_audit_logs(limit: int = 50) -> List[Dict[str, Any]]:
 
 def get_deployable_schedule(room: str = "E1-2-14", day_of_week: Optional[int] = None) -> Dict[str, Any]:
     if day_of_week is None:
-        day_of_week = datetime.now().weekday()
+        day_of_week = datetime.now(MALAYSIA_TZ).weekday()
 
     classes = get_classes(room=room, day_of_week=day_of_week)
     policy = get_policy()

@@ -951,60 +951,144 @@ function advanceTimeOneSecond(timeStr) {
 }
 
 // =========================================================================
-// SIMULATED BEEPER SYNTHESIZER (WEB AUDIO API)
+// SIMULATED BEEPER SYNTHESIZER (WEB AUDIO API - 1:1 ATmega328P PIEZO)
 // =========================================================================
 let audioCtx = null;
 window.beeperMuted = false;
+let audioUnlocked = false;
 
-function playBuzzerTone(freq, durationMs = 80) {
+async function getActiveAudioContext() {
+    if (!audioCtx) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return null;
+        audioCtx = new AudioCtx();
+    }
+    if (audioCtx.state === "suspended") {
+        try {
+            await audioCtx.resume();
+        } catch (e) {
+            return null;
+        }
+    }
+    if (audioCtx.state === "running") {
+        audioUnlocked = true;
+    }
+    return audioCtx;
+}
+
+// Global user gesture listener to reliably unlock Web Audio across all browsers
+const unlockEvents = ["click", "keydown", "touchstart", "pointerdown"];
+function unlockAudioHandler() {
+    getActiveAudioContext().then(ctx => {
+        if (ctx && ctx.state === "running") {
+            unlockEvents.forEach(evt => document.removeEventListener(evt, unlockAudioHandler));
+            const beeperBtn = document.getElementById("btnToggleBeeper");
+            if (beeperBtn && !window.beeperMuted) {
+                beeperBtn.textContent = "BEEPER: ON";
+                beeperBtn.style.color = "#00ff88";
+                beeperBtn.style.borderColor = "#00aa55";
+            }
+        }
+    });
+}
+unlockEvents.forEach(evt => document.addEventListener(evt, unlockAudioHandler, { passive: true }));
+
+async function playBuzzerTone(freq, durationMs = 80) {
     if (window.beeperMuted || !freq || freq <= 0) return;
     try {
-        if (!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        if (audioCtx.state === "suspended") {
-            audioCtx.resume();
-        }
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "square"; // Authentic square harmonic of 5V passive piezo
-        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + (durationMs / 1000.0));
+        const ctx = await getActiveAudioContext();
+        if (!ctx || ctx.state !== "running") return;
+
+        const now = ctx.currentTime;
+        const durSec = Math.max(0.02, durationMs / 1000.0);
+
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        // Authentic square harmonic of 5V passive piezo on ATmega328P Pin 3
+        osc.type = "square";
+        osc.frequency.setValueAtTime(freq, now);
+
+        // Solid square wave volume matching 5V passive piezo (0.28 gain)
+        const peakGain = 0.28;
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.linearRampToValueAtTime(peakGain, now + 0.002);
+        gain.gain.setValueAtTime(peakGain, now + durSec - 0.002);
+        gain.gain.linearRampToValueAtTime(0.0001, now + durSec);
+
         osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + (durationMs / 1000.0));
+        gain.connect(ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + durSec + 0.005);
     } catch (e) {
-        // Autoplay policy fallback
+        console.warn("Buzzer tone error:", e);
     }
 }
 
-function toggleBeeperAudio() {
+async function toggleBeeperAudio() {
     window.beeperMuted = !window.beeperMuted;
-    if (!window.beeperMuted && !audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
     const btn = document.getElementById("btnToggleBeeper");
-    if (btn) {
-        btn.textContent = window.beeperMuted ? "BEEPER: MUTE" : "BEEPER: ON";
-        btn.style.color = window.beeperMuted ? "var(--text-dim)" : "#00ff88";
-        btn.style.borderColor = window.beeperMuted ? "var(--border-dim)" : "#00aa55";
-    }
-    if (!window.beeperMuted) {
-        playBuzzerTone(2200, 90);
+    if (window.beeperMuted) {
+        if (btn) {
+            btn.textContent = "BEEPER: MUTED";
+            btn.style.color = "var(--text-dim)";
+            btn.style.borderColor = "var(--border-dim)";
+        }
+    } else {
+        await getActiveAudioContext();
+        if (btn) {
+            btn.textContent = "BEEPER: ON";
+            btn.style.color = "#00ff88";
+            btn.style.borderColor = "#00aa55";
+        }
+        await playBuzzerTone(2200, 100);
     }
 }
 window.playBuzzerTone = playBuzzerTone;
 window.toggleBeeperAudio = toggleBeeperAudio;
 
+// =========================================================================
+// 7-SEGMENT 4-DIGIT SPLASH ENGINE (AUto, F-On, F-OF, PrES, dAY1-7)
+// =========================================================================
+let splashText = null;
+let splashExpireTs = 0;
+
+function triggerDisplaySplash(text, durationMs = 1500) {
+    splashText = text;
+    splashExpireTs = Date.now() + durationMs;
+    const clockEl = document.getElementById("digitalClockDisplay");
+    if (clockEl) {
+        clockEl.textContent = text;
+        clockEl.style.letterSpacing = "0.2em";
+    }
+    setTimeout(() => {
+        if (Date.now() >= splashExpireTs) {
+            splashText = null;
+            if (clockEl && lastTelemetry && lastTelemetry.time) {
+                clockEl.textContent = advanceTimeOneSecond(lastTelemetry.time);
+                clockEl.style.letterSpacing = "";
+            }
+        }
+    }, durationMs);
+}
+window.triggerDisplaySplash = triggerDisplaySplash;
+
 function applyTelemetry(data) {
     lastTelemetry = data;
 
-    // Digital Clock (Compensated +1s for real-time visual alignment)
+    // Digital Clock & Splash Display
     const clockEl = document.getElementById("digitalClockDisplay");
-    if (clockEl && data.time) {
-        clockEl.textContent = advanceTimeOneSecond(data.time);
+    if (data.display_splash && !splashText) {
+        triggerDisplaySplash(data.display_splash, 1500);
+    }
+    if (clockEl) {
+        if (splashText && Date.now() < splashExpireTs) {
+            clockEl.textContent = splashText;
+        } else if (data.time) {
+            clockEl.textContent = advanceTimeOneSecond(data.time);
+            clockEl.style.letterSpacing = "";
+        }
     }
 
     // Relays & Hardware LED Indicators
@@ -1345,6 +1429,7 @@ function setControlModeUI(mode) {
 
 async function setAutoMode() {
     setControlModeUI(0);
+    triggerDisplaySplash("AUto", 1500);
     playBuzzerTone(2000, 50); // Matches smart_switch.ino triggerBeep(2000, 50)
     try {
         const res = await fetch("/api/override/auto", { method: "POST" });
@@ -1364,6 +1449,7 @@ async function setForceOn(minutes = null) {
         dur = foInput ? parseInt(foInput.value, 10) || 60 : 60;
     }
     setControlModeUI(1);
+    triggerDisplaySplash("F-On", 1500);
     playBuzzerTone(2600, 60); // Matches smart_switch.ino triggerBeep(2600, 60)
     try {
         const res = await fetch("/api/override/force-on", {
@@ -1382,6 +1468,7 @@ async function setForceOn(minutes = null) {
 
 async function setForceOff() {
     setControlModeUI(2);
+    triggerDisplaySplash("F-OF", 1500);
     playBuzzerTone(1600, 60); // Matches smart_switch.ino triggerBeep(1600, 60)
     try {
         const res = await fetch("/api/override/force-off", { method: "POST" });
@@ -1396,6 +1483,7 @@ async function setForceOff() {
 
 async function setPresentationMode() {
     setControlModeUI(3);
+    triggerDisplaySplash("PrES", 1500);
     playBuzzerTone(2700, 80); // Matches smart_switch.ino triggerBeep(2700, 80)
     try {
         const res = await fetch("/api/override/presentation", { method: "POST" });
@@ -1437,10 +1525,17 @@ window.toggleRelayLightsUI = toggleRelayLightsUI;
 window.toggleRelayHVACUI = toggleRelayHVACUI;
 
 async function toggleManualOverride() {
-    const btnAuto = document.getElementById("btnModeAuto") || document.getElementById("btnAutoMode");
-    const isAuto = btnAuto && btnAuto.classList.contains("btn-primary");
+    // 1:1 hardware firmware parity with ATmega328P Pin 10 Button 1:
+    // In AUTO: If scheduled session active/precool/grace -> engage FORCE OFF, else engage FORCE ON.
+    // In any override: return to AUTO.
+    const isAuto = !lastTelemetry || !lastTelemetry.override_mode || lastTelemetry.override_mode === 0;
     if (isAuto) {
-        await setForceOn(60);
+        const sched = lastTelemetry ? lastTelemetry.state : "STANDBY";
+        if (sched === "CLASS" || sched === "PRECOOL" || sched === "GRACE") {
+            await setForceOff();
+        } else {
+            await setForceOn(60);
+        }
     } else {
         await setAutoMode();
     }
@@ -1448,25 +1543,51 @@ async function toggleManualOverride() {
 
 async function syncHostClock() {
     try {
-        const res = await fetch("/api/clock/sync", { method: "POST" });
+        const now = new Date();
+        const h = now.getHours();
+        const m = now.getMinutes();
+        const s = now.getSeconds();
+        const jsDay = now.getDay();
+        const dayIdx = (jsDay === 0) ? 6 : (jsDay - 1);
+        const dayStr = DAY_CODES[dayIdx] || "MON";
+
+        playBuzzerTone(2800, 50); // Crisp user gesture confirmation pip
+
+        const res = await fetch("/api/clock/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                hour: h,
+                minute: m,
+                second: s,
+                day: dayStr
+            })
+        });
         const data = await res.json();
-        if (res.ok) showToast(`CLOCK SYNCHRONIZED: ${data.synced_time}`);
+        if (res.ok) {
+            const synced = data.synced_time || `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+            triggerDisplaySplash(synced.substring(0, 5), 1500);
+            showToast(`HOST TIME SYNCHRONIZED: ${synced} (${data.day || dayStr})`);
+            fetchStatus();
+        } else {
+            showToast("SYNC FAILED");
+        }
     } catch (e) {
         showToast("SYNC FAILED");
     }
 }
 
 async function testBuzzer(freq = 2200, duration = 120) {
-    playBuzzerTone(freq, duration);
+    await playBuzzerTone(freq, duration);
     try {
         const res = await fetch(`/api/hardware/beep?freq=${freq}&duration=${duration}`, { method: "POST" });
         if (res.ok) {
             showToast(`BEEPER TEST DISPATCHED [PIN 3 // ${freq}Hz]`);
         } else {
-            showToast("BEEPER TEST FAILED - CHECK SERIAL");
+            showToast(`BEEPER TEST ACTIVE [SIMULATED ${freq}Hz]`);
         }
     } catch (e) {
-        showToast("BEEPER COMMAND ERROR");
+        showToast(`BEEPER TEST ACTIVE [SIMULATED ${freq}Hz]`);
     }
 }
 

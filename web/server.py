@@ -446,6 +446,31 @@ async def websocket_telemetry_endpoint(websocket: WebSocket):
     except Exception:
         manager.disconnect(websocket)
 
+# --- Physical Hardware Bridge WebSocket Ingress (Laptop Tunnel) ---
+@app.websocket("/ws/hardware-bridge")
+async def websocket_hardware_bridge_endpoint(websocket: WebSocket):
+    token = websocket.query_params.get("token")
+    expected_token = os.getenv("WEB_PASSWORD", "123").strip()
+    if token != expected_token:
+        logger.warning(f"Unauthorized hardware bridge attempt with token: {token}")
+        await websocket.close(code=1008)
+        return
+
+    await websocket.accept()
+    loop = asyncio.get_event_loop()
+    bridge.register_hardware_bridge(websocket, loop)
+    logger.info("Physical hardware bridge established from laptop.")
+    try:
+        while True:
+            line = await websocket.receive_text()
+            bridge.handle_bridge_line(line)
+    except WebSocketDisconnect:
+        logger.info("Physical hardware bridge disconnected.")
+        bridge.unregister_hardware_bridge()
+    except Exception as e:
+        logger.error(f"Hardware bridge socket error: {e}")
+        bridge.unregister_hardware_bridge()
+
 # Serve Static UI Files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

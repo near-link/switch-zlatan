@@ -948,6 +948,54 @@ function advanceTimeOneSecond(timeStr) {
     return `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 
+// =========================================================================
+// SIMULATED BEEPER SYNTHESIZER (WEB AUDIO API)
+// =========================================================================
+let audioCtx = null;
+window.beeperMuted = false;
+
+function playBuzzerTone(freq, durationMs = 80) {
+    if (window.beeperMuted || !freq || freq <= 0) return;
+    try {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === "suspended") {
+            audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "square"; // Authentic square harmonic of 5V passive piezo
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + (durationMs / 1000.0));
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + (durationMs / 1000.0));
+    } catch (e) {
+        // Autoplay policy fallback
+    }
+}
+
+function toggleBeeperAudio() {
+    window.beeperMuted = !window.beeperMuted;
+    if (!window.beeperMuted && !audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const btn = document.getElementById("btnToggleBeeper");
+    if (btn) {
+        btn.textContent = window.beeperMuted ? "BEEPER: MUTE" : "BEEPER: ON";
+        btn.style.color = window.beeperMuted ? "var(--text-dim)" : "#00ff88";
+        btn.style.borderColor = window.beeperMuted ? "var(--border-dim)" : "#00aa55";
+    }
+    if (!window.beeperMuted) {
+        playBuzzerTone(2200, 90);
+    }
+}
+window.playBuzzerTone = playBuzzerTone;
+window.toggleBeeperAudio = toggleBeeperAudio;
+
 function applyTelemetry(data) {
     lastTelemetry = data;
 
@@ -1182,6 +1230,33 @@ function applyTelemetry(data) {
         p2.textContent = data.day ? `DAY ${data.day}` : "READY";
         p2.classList.toggle("active", true);
     }
+
+    // Hardware Link Status Badge
+    const hwBadge = document.getElementById("hardwareLinkBadge");
+    if (hwBadge) {
+        if (data.hardware_linked) {
+            hwBadge.textContent = "HARDWARE: PHYSICAL LINK ACTIVE (/dev/ttyACM0)";
+            hwBadge.style.color = "#00ff88";
+            hwBadge.style.borderColor = "#00aa55";
+            hwBadge.style.background = "#001a11";
+        } else {
+            hwBadge.textContent = "HARDWARE: VIRTUAL [24/7 ONLINE]";
+            hwBadge.style.color = "#888888";
+            hwBadge.style.borderColor = "#333333";
+            hwBadge.style.background = "#0a0a0d";
+        }
+    }
+
+    const sideHwText = document.getElementById("sidebarHwLinkText");
+    if (sideHwText) {
+        sideHwText.textContent = data.hardware_linked ? "PHYSICAL (LIVE USB)" : "VIRTUAL (24/7 ONLINE)";
+        sideHwText.style.color = data.hardware_linked ? "#00ff88" : "#888888";
+    }
+
+    // Simulated Beeper trigger when untethered
+    if (!data.hardware_linked && data.buzzer_active && data.buzzer_freq) {
+        playBuzzerTone(data.buzzer_freq, 80);
+    }
 }
 
 async function fetchStatus() {
@@ -1211,6 +1286,7 @@ function setControlModeUI(mode) {
 
 async function setAutoMode() {
     setControlModeUI(0);
+    playBuzzerTone(2000, 60);
     try {
         const res = await fetch("/api/override/auto", { method: "POST" });
         if (res.ok) {
@@ -1229,6 +1305,7 @@ async function setForceOn(minutes = null) {
         dur = foInput ? parseInt(foInput.value, 10) || 60 : 60;
     }
     setControlModeUI(1);
+    playBuzzerTone(2200, 80);
     try {
         const res = await fetch("/api/override/force-on", {
             method: "POST",
@@ -1246,6 +1323,7 @@ async function setForceOn(minutes = null) {
 
 async function setForceOff() {
     setControlModeUI(2);
+    playBuzzerTone(1800, 80);
     try {
         const res = await fetch("/api/override/force-off", { method: "POST" });
         if (res.ok) {
@@ -1259,6 +1337,7 @@ async function setForceOff() {
 
 async function setPresentationMode() {
     setControlModeUI(3);
+    playBuzzerTone(2600, 100);
     try {
         const res = await fetch("/api/override/presentation", { method: "POST" });
         if (res.ok) {
@@ -1291,6 +1370,7 @@ async function syncHostClock() {
 }
 
 async function testBuzzer(freq = 2200, duration = 120) {
+    playBuzzerTone(freq, duration);
     try {
         const res = await fetch(`/api/hardware/beep?freq=${freq}&duration=${duration}`, { method: "POST" });
         if (res.ok) {
@@ -1304,6 +1384,7 @@ async function testBuzzer(freq = 2200, duration = 120) {
 }
 
 async function setSpeed(factor) {
+    playBuzzerTone(2400, 50);
     try {
         const res = await fetch("/api/speed", {
             method: "POST",

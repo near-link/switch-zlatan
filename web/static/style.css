@@ -122,6 +122,166 @@ html, body {
   justify-content: space-between;
   user-select: none;
   z-index: 100;
+  transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sidebar-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-medium);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 3px 6px;
+  cursor: pointer;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.sidebar-toggle-btn:hover {
+  background: var(--text-pure);
+  color: var(--text-inverted);
+}
+
+/* Collapsed Sidebar Rail (Desktop) */
+.sidebar.collapsed {
+  width: 60px;
+  min-width: 60px;
+}
+
+.sidebar.collapsed .brand-subtitle,
+.sidebar.collapsed .brand-badge,
+.sidebar.collapsed .brand-full,
+.sidebar.collapsed .nav-label-desktop,
+.sidebar.collapsed .sidebar-telemetry,
+.sidebar.collapsed .hw-tag span:first-child,
+.sidebar.collapsed #sidebarHwLinkText,
+.sidebar.collapsed .hw-tag:not(:last-child) {
+  display: none !important;
+}
+
+.sidebar.collapsed .brand-short {
+  display: inline-block !important;
+  font-size: 1rem;
+}
+
+.sidebar.collapsed .brand-section {
+  padding: 1rem 0.4rem;
+  text-align: center;
+}
+
+.sidebar.collapsed .brand-meta-group {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.sidebar.collapsed .sidebar-toggle-btn {
+  padding: 2px 4px;
+}
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 0.9rem 0;
+}
+
+.sidebar.collapsed .nav-num {
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.sidebar.collapsed .sidebar-footer {
+  padding: 0.75rem 0.4rem;
+  display: flex;
+  justify-content: center;
+}
+
+/* Sidebar Telemetry Deck (Fills vertical void) */
+.sidebar-telemetry {
+  padding: 0.85rem 1.15rem;
+  border-top: 1px solid var(--border-strong);
+  background: rgba(5, 5, 6, 0.65);
+}
+
+.sidebar-telemetry-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--text-dim);
+  margin-bottom: 0.65rem;
+  letter-spacing: 0.08em;
+}
+
+.side-channel-rack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+}
+
+.side-channel-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.side-ch-pill {
+  font-size: 0.58rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  background: #080808;
+  letter-spacing: 0.04em;
+  transition: all 0.2s ease;
+}
+
+.side-ch-pill.side-yellow {
+  background: #ffcc00;
+  color: #000000;
+  border-color: #ffcc00;
+}
+
+.side-ch-pill.side-blue {
+  background: #0088ff;
+  color: #ffffff;
+  border-color: #0088ff;
+}
+
+.side-ch-pill.side-red {
+  background: #ff3333;
+  color: #ffffff;
+  border-color: #ff3333;
+}
+
+.side-metric-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  border-top: 1px dashed var(--border-dim);
+  padding-top: 0.5rem;
+}
+
+.side-metric-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.side-metric-label {
+  font-size: 0.56rem;
+  color: var(--text-dim);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.side-metric-val {
+  font-size: 0.72rem;
+  color: var(--text-pure);
+  font-weight: 800;
+  font-family: var(--font-mono);
 }
 
 .brand-section {
@@ -1586,7 +1746,8 @@ html, body {
     margin-bottom: 0 !important;
     width: fit-content !important;
   }
-  .brand-subtitle {
+  .brand-subtitle,
+  .sidebar-toggle-btn {
     display: none !important;
   }
   .mobile-hide {

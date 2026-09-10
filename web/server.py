@@ -178,7 +178,7 @@ class ClockSyncPayload(BaseModel):
     day: Optional[str] = Field(default=None, description="Day code e.g. MON, TUE, WED")
 
 class ForceOnModel(BaseModel):
-    minutes: int = Field(default=60, ge=1, le=480)
+    minutes: Optional[int] = Field(default=None, ge=1, le=480)
 
 class SpeedSetModel(BaseModel):
     factor: int = Field(..., description="1, 60, or 600")

@@ -107,6 +107,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     switchConsoleRoom(activeRoom);
     initNavigation();
+    initSidebarState();
     initWebSocket();
     fetchPolicy();
     fetchLogs();
@@ -121,6 +122,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setInterval(updateEnergySavings, 1000);
 });
+
+// =============================================================================
+// SIDEBAR COLLAPSE MANAGEMENT
+// =============================================================================
+function toggleSidebar() {
+    const sb = document.querySelector(".sidebar");
+    const btn = document.getElementById("sidebarToggleBtn");
+    if (!sb) return;
+    const isCollapsed = sb.classList.toggle("collapsed");
+    if (btn) btn.textContent = isCollapsed ? "▶" : "◀";
+    localStorage.setItem("switch_sidebar_collapsed", isCollapsed ? "true" : "false");
+}
+
+function initSidebarState() {
+    const saved = localStorage.getItem("switch_sidebar_collapsed");
+    if (saved === "true") {
+        const sb = document.querySelector(".sidebar");
+        const btn = document.getElementById("sidebarToggleBtn");
+        if (sb) sb.classList.add("collapsed");
+        if (btn) btn.textContent = "▶";
+    }
+}
 
 // =============================================================================
 // NAVIGATION & SPA HASH ROUTING
@@ -1409,6 +1432,30 @@ function applyTelemetry(data) {
         sideHwText.style.color = data.hardware_linked ? "#00ff88" : "#888888";
     }
 
+    // Update Sidebar Telemetry Deck
+    const sLights = document.getElementById("sideLedLights");
+    if (sLights) {
+        sLights.textContent = data.lights_on ? "ENERGIZED" : "STANDBY";
+        sLights.className = "side-ch-pill" + (data.lights_on ? " side-yellow" : "");
+    }
+    const sAC = document.getElementById("sideLedAC");
+    if (sAC) {
+        sAC.textContent = data.ac_on ? "ENERGIZED" : "STANDBY";
+        sAC.className = "side-ch-pill" + (data.ac_on ? " side-blue" : "");
+    }
+    const sStby = document.getElementById("sideLedStandby");
+    if (sStby) {
+        sStby.textContent = data.standby_on ? "ACTIVE" : "OFF";
+        sStby.className = "side-ch-pill" + (data.standby_on ? " side-red" : "");
+    }
+    const sLoad = document.getElementById("sideMetricLoad");
+    if (sLoad) {
+        let lWatts = 0;
+        if (data.lights_on) lWatts += 480;
+        if (data.ac_on) lWatts += 2200;
+        sLoad.textContent = `${lWatts} W`;
+    }
+
     // Simulated Beeper trigger when untethered
     if (!data.hardware_linked && data.buzzer_active && data.buzzer_freq) {
         const bTs = (data.last_buzzer && data.last_buzzer.timestamp) ? data.last_buzzer.timestamp : 0;
@@ -1464,19 +1511,22 @@ async function setForceOn(minutes = null) {
     let dur = minutes;
     if (dur === null) {
         const foInput = document.getElementById("policyForceOn");
-        dur = foInput ? parseInt(foInput.value, 10) || 60 : 60;
+        dur = foInput ? parseInt(foInput.value, 10) || null : null;
     }
     setControlModeUI(1);
     triggerDisplaySplash("F-On", 1500);
     playBuzzerTone(2600, 60); // Matches smart_switch.ino triggerBeep(2600, 60)
     try {
+        const payload = dur ? { minutes: dur } : {};
         const res = await fetch("/api/override/force-on", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ minutes: dur })
+            body: JSON.stringify(payload)
         });
         if (res.ok) {
-            showToast(`FORCE ON ENGAGED (${dur} MIN AUTO-OFF TIMER)`);
+            const resData = await res.json();
+            const actMins = resData.duration_minutes || dur || 60;
+            showToast(`FORCE ON ENGAGED (${actMins} MIN AUTO-OFF TIMER)`);
             fetchStatus();
         }
     } catch (e) {

@@ -612,7 +612,13 @@ class ArduinoSerialBridge:
                 break
 
         if clean_cmd.startswith("FORCE_ON"):
-            minutes = int(clean_cmd.split(":")[1]) if ":" in clean_cmd else 60
+            fom_default = policy.get("force_on_minutes", 60)
+            minutes = fom_default
+            if ":" in clean_cmd:
+                try:
+                    minutes = int(clean_cmd.split(":")[1])
+                except Exception:
+                    minutes = fom_default
             self.sim_override_mode = 1
             self.sim_override_remaining = minutes
             self.sim_force_on_until_min = cur_total_min + minutes
@@ -665,9 +671,10 @@ class ArduinoSerialBridge:
                     self._set_splash("F-OF", 1.5)
                     self.trigger_virtual_beep(1600, 60)
                 else:
+                    fom = policy.get("force_on_minutes", 60)
                     self.sim_override_mode = 1
-                    self.sim_override_remaining = 60
-                    self.sim_force_on_until_min = cur_total_min + 60
+                    self.sim_override_remaining = fom
+                    self.sim_force_on_until_min = cur_total_min + fom
                     self._set_splash("F-On", 1.5)
                     self.trigger_virtual_beep(2600, 60)
             self._run_virtual_tick(force=True)
@@ -721,7 +728,11 @@ class ArduinoSerialBridge:
         cmd = f"SET_SCHED:{sH1}:{sM1}:{eH1}:{eM1}:{sH2}:{sM2}:{eH2}:{eM2}:{precool}:{grace}"
         return self.send_command(cmd)
 
-    def force_on(self, minutes: int = 60) -> bool:
+    def force_on(self, minutes: Optional[int] = None) -> bool:
+        if minutes is None:
+            from web.database import get_policy
+            p = get_policy()
+            minutes = p.get("force_on_minutes", 60)
         with self.lock:
             self.state["manual_override"] = True
             self.state["override_mode"] = 1

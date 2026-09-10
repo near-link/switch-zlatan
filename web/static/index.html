@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>SWITCH_ // IIUM Energy Conservation</title>
-    <link rel="stylesheet" href="/static/style.css?v=4.8">
+    <link rel="stylesheet" href="/static/style.css?v=4.9">
 </head>
 <body>
     <!-- AUTHENTICATION OVERLAY GATE -->
@@ -33,34 +33,71 @@
         <aside class="sidebar">
             <div>
                 <div class="brand-section">
-                    <span class="brand-badge">ZLATANFC</span>
-                    <h1 class="brand-title">SWITCH_</h1>
-                    <div class="brand-subtitle">IN-WALL ATMEGA328P // SDG 7 &amp; 9</div>
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem;">
+                        <div class="brand-meta-group">
+                            <span class="brand-badge">ZLATANFC</span>
+                            <h1 class="brand-title"><span class="brand-full">SWITCH_</span><span class="brand-short" style="display:none;">S_</span></h1>
+                            <div class="brand-subtitle">IN-WALL ATMEGA328P // SDG 7 &amp; 9</div>
+                        </div>
+                        <button id="sidebarToggleBtn" class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Collapse/Expand Sidebar">◀</button>
+                    </div>
                 </div>
 
                 <!-- NAVIGATION MENU -->
                 <nav class="nav-menu">
-                    <a class="nav-item active" data-view="viewConsole" onclick="navigate('viewConsole')">
+                    <a class="nav-item active" data-view="viewConsole" onclick="navigate('viewConsole')" title="Hardware Console">
                         <span class="nav-num">[01]</span>
                         <span class="nav-label-desktop">HARDWARE CONSOLE</span>
                         <span class="nav-label-mobile">CONTROLS</span>
                     </a>
-                    <a class="nav-item" data-view="viewTimetable" onclick="navigate('viewTimetable')">
+                    <a class="nav-item" data-view="viewTimetable" onclick="navigate('viewTimetable')" title="Timetable Matrix">
                         <span class="nav-num">[02]</span>
                         <span class="nav-label-desktop">TIMETABLE MATRIX</span>
                         <span class="nav-label-mobile">SCHEDULE</span>
                     </a>
-                    <a class="nav-item" data-view="viewAnalytics" onclick="navigate('viewAnalytics')">
+                    <a class="nav-item" data-view="viewAnalytics" onclick="navigate('viewAnalytics')" title="Energy & SDG 7">
                         <span class="nav-num">[03]</span>
                         <span class="nav-label-desktop">ENERGY &amp; SDG 7</span>
                         <span class="nav-label-mobile">ECO IMPACT</span>
                     </a>
-                    <a id="navItemDiagnostics" class="nav-item" data-view="viewDiagnostics" onclick="navigate('viewDiagnostics')">
+                    <a id="navItemDiagnostics" class="nav-item" data-view="viewDiagnostics" onclick="navigate('viewDiagnostics')" title="Diagnostics">
                         <span class="nav-num">[04]</span>
                         <span class="nav-label-desktop">DIAGNOSTICS</span>
                         <span class="nav-label-mobile">DIAGNOSTICS</span>
                     </a>
                 </nav>
+            </div>
+
+            <!-- LIVE SIDEBAR TELEMETRY DECK (ELIMINATES DEAD VOID) -->
+            <div class="sidebar-telemetry mobile-hide">
+                <div class="sidebar-telemetry-head">
+                    <span class="telemetry-label">// SYSTEM TELEMETRY</span>
+                    <span class="telemetry-sub" id="sideTelemetrySub">LIVE</span>
+                </div>
+                <div class="side-channel-rack">
+                    <div class="side-channel-item">
+                        <span class="side-ch-name">CH1 LIGHTS</span>
+                        <span id="sideLedLights" class="side-ch-pill">STANDBY</span>
+                    </div>
+                    <div class="side-channel-item">
+                        <span class="side-ch-name">CH2 HVAC</span>
+                        <span id="sideLedAC" class="side-ch-pill">STANDBY</span>
+                    </div>
+                    <div class="side-channel-item">
+                        <span class="side-ch-name">CH3 STATUS</span>
+                        <span id="sideLedStandby" class="side-ch-pill side-red active">STANDBY</span>
+                    </div>
+                </div>
+                <div class="side-metric-grid">
+                    <div class="side-metric-box">
+                        <span class="side-metric-label">CONNECTED LOAD</span>
+                        <span class="side-metric-val" id="sideMetricLoad">0 W</span>
+                    </div>
+                    <div class="side-metric-box">
+                        <span class="side-metric-label">MAINS VOLTAGE</span>
+                        <span class="side-metric-val">240.0 V</span>
+                    </div>
+                </div>
             </div>
 
             <div class="sidebar-footer">
@@ -162,7 +199,7 @@
                                 <span class="scope-label" style="display:block; margin-bottom:0.45rem;">SYSTEM CONTROL MODE // SCHEDULE ARBITRATION:</span>
                                 <div class="mode-btn-grid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:4px; margin-bottom:0.5rem;">
                                     <button id="btnModeAuto" class="btn btn-sm btn-primary" onclick="setAutoMode()" title="Strict Timetable Schedule Adherence">AUTO SCHEDULE</button>
-                                    <button id="btnModeForceOn" class="btn btn-sm" onclick="setForceOn(60)" title="Force utilities ON with 60-min auto-off timer">FORCE ON [+60M]</button>
+                                    <button id="btnModeForceOn" class="btn btn-sm" onclick="setForceOn()" title="Force utilities ON with policy auto-off timer">FORCE ON</button>
                                     <button id="btnModeForceOff" class="btn btn-sm" onclick="setForceOff()" title="Early dismissal: Force OFF until session ends">FORCE OFF</button>
                                     <button id="btnModePres" class="btn btn-sm" onclick="setPresentationMode()" title="Projector mode: Lights OFF, AC ON">PRESENTATION</button>
                                 </div>
@@ -742,6 +779,6 @@
 
     <div id="toastContainer"></div>
 
-    <script src="/static/app.js?v=4.8"></script>
+    <script src="/static/app.js?v=4.9"></script>
 </body>
 </html>

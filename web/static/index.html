@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>SWITCH_ // IIUM Energy Conservation</title>
-    <link rel="stylesheet" href="/static/style.css?v=4.7">
+    <link rel="stylesheet" href="/static/style.css?v=4.8">
 </head>
 <body>
     <!-- AUTHENTICATION OVERLAY GATE -->
@@ -91,7 +91,6 @@
             <!-- TOP CHROME BAR -->
             <header class="topbar">
                 <div class="topbar-title-group">
-                    <span class="topbar-tag" id="topbarTag">SEC.01</span>
                     <h2 class="topbar-title" id="screenTitle">HARDWARE DIGITAL TWIN &amp; CONTROLS</h2>
                 </div>
             </header>
@@ -104,7 +103,6 @@
                 <div class="b-panel target-fleet-panel">
                     <div class="controller-fleet-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
                         <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
-                            <span class="scope-label" style="font-size:0.68rem; margin:0;">ACTIVE CONTROLLER TARGET:</span>
                             <select id="consoleRoomSelect" class="select-control" style="padding:0.3rem 0.6rem; font-size:0.75rem; font-weight:700;" onchange="switchConsoleRoom(this.value)">
                                 <option value="E1-2-14">E1-2-14 // Embedded Systems Lab [LIVE BENCH HARDWARE]</option>
                                 <option value="E1-1-01">E1-1-01 // Lecture Hall [SIMULATED EDGE SWITCH]</option>
@@ -112,18 +110,7 @@
                                 <option value="E1-2-16">E1-2-16 // Seminar Room [SIMULATED EDGE SWITCH]</option>
                                 <option value="A-1-02">A-1-02 // KICT Networking Lab [SIMULATED EDGE SWITCH]</option>
                             </select>
-                            <span id="controllerTypeBadge" class="meta-badge" style="background:#003311; color:#00ff66; border:1px solid #00aa44; font-size:0.65rem;">LIVE SERIAL USB</span>
-                            <span id="controllerDevBadge" class="meta-badge" style="background:#330000; color:#ff3333; border:1px solid #aa0000; font-size:0.65rem; font-weight:900;">DEV</span>
-                        </div>
-                        <div class="mobile-hide" style="display:flex; align-items:center; gap:1.25rem; font-size:0.68rem; font-weight:700;">
-                            <div>
-                                <span style="color:var(--text-dim);">CAMPUS FLEET ARCHITECTURE:</span>
-                                <span style="color:var(--text-pure); margin-left:4px;">1 PHYSICAL + 14 FLEET NODES</span>
-                            </div>
-                            <div>
-                                <span style="color:var(--text-dim);">EDGE PROTOCOL:</span>
-                                <span style="color:#00ffcc; margin-left:4px;">USB-SERIAL + MQTT/TLS</span>
-                            </div>
+                            <span id="controllerTypeBadge" class="meta-badge" style="background:#0a0a0d; color:#888888; border:1px solid #333333; font-size:0.65rem;">DEMO</span>
                         </div>
                     </div>
                 </div>
@@ -277,7 +264,7 @@
 
                     <!-- Right: Schedule & Hardware Policy -->
                     <div class="console-policy-col" style="display:flex; flex-direction:column; gap:1.25rem;">
-                        <div class="b-panel" style="flex:1;">
+                        <div class="b-panel">
                             <div class="b-panel-header">
                                 <span class="b-panel-title">Active Operating Windows &amp; EEPROM Policy</span>
                                 <button id="btnFlashConsole" class="btn btn-sm btn-primary" onclick="deploySchedule()">FLASH EEPROM [USB]</button>
@@ -755,6 +742,6 @@
 
     <div id="toastContainer"></div>
 
-    <script src="/static/app.js?v=4.5"></script>
+    <script src="/static/app.js?v=4.8"></script>
 </body>
 </html>

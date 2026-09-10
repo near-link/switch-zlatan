@@ -290,21 +290,23 @@ function switchConsoleRoom(roomId) {
     const typeBadge = document.getElementById("controllerTypeBadge");
     if (typeBadge) {
         if (isPoc) {
-            typeBadge.textContent = "LIVE SERIAL USB";
-            typeBadge.style.background = "#003311";
-            typeBadge.style.color = "#00ff66";
-            typeBadge.style.borderColor = "#00aa44";
+            if (window.lastHardwareLinked) {
+                typeBadge.textContent = "LIVE SERIAL USB";
+                typeBadge.style.background = "#003311";
+                typeBadge.style.color = "#00ff66";
+                typeBadge.style.borderColor = "#00aa44";
+            } else {
+                typeBadge.textContent = "DEMO";
+                typeBadge.style.background = "#0a0a0d";
+                typeBadge.style.color = "#888888";
+                typeBadge.style.borderColor = "#333333";
+            }
         } else {
             typeBadge.textContent = "SIMULATED EDGE NODE (MQTT/REST)";
             typeBadge.style.background = "#1a1500";
             typeBadge.style.color = "#ffcc00";
             typeBadge.style.borderColor = "#aa8800";
         }
-    }
-
-    const devBadge = document.getElementById("controllerDevBadge");
-    if (devBadge) {
-        devBadge.style.display = isPoc ? "inline-block" : "none";
     }
 
     const demoSpeed = document.getElementById("demoSpeedSection");
@@ -1370,6 +1372,7 @@ function applyTelemetry(data) {
     }
 
     // Hardware Link Status Badge
+    window.lastHardwareLinked = !!data.hardware_linked;
     const hwBadge = document.getElementById("hardwareLinkBadge");
     if (hwBadge) {
         if (data.hardware_linked) {
@@ -1382,6 +1385,21 @@ function applyTelemetry(data) {
             hwBadge.style.color = "#888888";
             hwBadge.style.borderColor = "#333333";
             hwBadge.style.background = "#0a0a0d";
+        }
+    }
+
+    const typeBadge = document.getElementById("controllerTypeBadge");
+    if (typeBadge && activeRoom === "E1-2-14") {
+        if (data.hardware_linked) {
+            typeBadge.textContent = "LIVE SERIAL USB";
+            typeBadge.style.background = "#003311";
+            typeBadge.style.color = "#00ff66";
+            typeBadge.style.borderColor = "#00aa44";
+        } else {
+            typeBadge.textContent = "DEMO";
+            typeBadge.style.background = "#0a0a0d";
+            typeBadge.style.color = "#888888";
+            typeBadge.style.borderColor = "#333333";
         }
     }
 
